@@ -1,0 +1,6 @@
+{
+  "name": "Pembuat Kartu Pelajar SMA Negeri 1 Julok",
+  "description": "Aplikasi cetak kartu pelajar otomatis SMA Negeri 1 Julok dengan impor Excel/CSV, foto siswa, QR Code, dan kustomisasi desain.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

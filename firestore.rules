@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: default-deny all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUserVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'anonymous');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'rizafani@gmail.com' && request.auth.token.email_verified == true
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['nama', 'nisn', 'kelas', 'ownerId']) &&
+             data.nama is string && data.nama.size() > 0 && data.nama.size() <= 150 &&
+             data.nisn is string && data.nisn.size() > 0 && data.nisn.size() <= 30 &&
+             data.kelas is string && data.kelas.size() <= 50 &&
+             data.ownerId is string && data.ownerId == request.auth.uid;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll(['schoolName', 'ownerId']) &&
+             data.schoolName is string && data.schoolName.size() > 0 && data.schoolName.size() <= 150 &&
+             data.ownerId is string && data.ownerId == request.auth.uid;
+    }
+
+    // Students Collection
+    match /students/{studentId} {
+      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(studentId) &&
+                       isValidStudent(incoming()) &&
+                       incoming().ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(studentId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       isValidStudent(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(studentId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Card Settings Collection
+    match /settings/{settingId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(settingId) &&
+                       isValidSettings(incoming()) &&
+                       incoming().ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(settingId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       isValidSettings(incoming());
+
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+  }
+}

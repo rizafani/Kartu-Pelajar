@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Indonesian student identity record for student ID card generation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nis": { "type": "string", "maxLength": 30 },
+        "nisn": { "type": "string", "maxLength": 30 },
+        "nama": { "type": "string", "maxLength": 150 },
+        "tempatLahir": { "type": "string", "maxLength": 100 },
+        "tanggalLahir": { "type": "string", "maxLength": 30 },
+        "jenisKelamin": { "type": "string", "enum": ["L", "P"] },
+        "kelas": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 80 },
+        "alamat": { "type": "string", "maxLength": 300 },
+        "masaBerlaku": { "type": "string", "maxLength": 50 },
+        "foto": { "type": "string", "maxLength": 500000 },
+        "qrCode": { "type": "string", "maxLength": 1000 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["nisn", "nama", "kelas", "ownerId"]
+    },
+    "CardSettings": {
+      "title": "CardSettings",
+      "description": "School branding and student ID card layout customization settings",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string", "maxLength": 150 },
+        "npsn": { "type": "string", "maxLength": 30 },
+        "schoolAddress": { "type": "string", "maxLength": 300 },
+        "provinsiText": { "type": "string", "maxLength": 100 },
+        "dinasText": { "type": "string", "maxLength": 100 },
+        "website": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 120 },
+        "schoolLogo": { "type": "string", "maxLength": 500000 },
+        "kepalaSekolahNama": { "type": "string", "maxLength": 150 },
+        "kepalaSekolahNip": { "type": "string", "maxLength": 50 },
+        "kepalaSekolahJabatan": { "type": "string", "maxLength": 80 },
+        "kotaPenerbit": { "type": "string", "maxLength": 80 },
+        "tanggalTerbit": { "type": "string", "maxLength": 50 },
+        "tandaTanganUrl": { "type": "string", "maxLength": 500000 },
+        "stempelUrl": { "type": "string", "maxLength": 500000 },
+        "cardTitle": { "type": "string", "maxLength": 100 },
+        "templateStyle": { "type": "string", "maxLength": 50 },
+        "primaryColor": { "type": "string", "maxLength": 20 },
+        "secondaryColor": { "type": "string", "maxLength": 20 },
+        "accentColor": { "type": "string", "maxLength": 20 },
+        "orientation": { "type": "string", "maxLength": 20 },
+        "photoBorderRadius": { "type": "string", "maxLength": 20 },
+        "showWatermark": { "type": "boolean" },
+        "watermarkOpacity": { "type": "number" },
+        "showPancasila": { "type": "boolean" },
+        "pancasilaLogo": { "type": "string", "maxLength": 500000 },
+        "showMerdekaBelajar": { "type": "boolean" },
+        "merdekaBelajarLogo": { "type": "string", "maxLength": 500000 },
+        "showHoloBadge": { "type": "boolean" },
+        "showDotGrids": { "type": "boolean" },
+        "showTandaTangan": { "type": "boolean" },
+        "showStempel": { "type": "boolean" },
+        "qrContent": { "type": "string", "maxLength": 50 },
+        "customQrPrefix": { "type": "string", "maxLength": 200 },
+        "backTitle": { "type": "string", "maxLength": 150 },
+        "backRules": { "type": "array" },
+        "backFooterNote": { "type": "string", "maxLength": 300 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["schoolName", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "Student" },
+      "description": "Student cards collection"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "CardSettings" },
+      "description": "School card configuration settings"
+    }
+  }
+}
