@@ -25,9 +25,11 @@ export type CardThemePreset =
 
 export type CardTemplateStyle = 
   | 'resmi_kedinasan' 
-  | 'smart_card' 
-  | 'classic_kop' 
-  | 'canva_modern';
+  | 'garuda_emas' 
+  | 'cyber_smart_id' 
+  | 'batik_nusantara' 
+  | 'minimalis_modern' 
+  | 'kartu_hijau_islami';
 
 export interface CardSettings {
   orientation: CardOrientation;

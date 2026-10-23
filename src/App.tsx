@@ -90,8 +90,9 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Default to the new official Indonesian government template as requested
-        if (!parsed.templateStyle || parsed.templateStyle === 'canva_modern') {
+        // Default to the official Indonesian government template if empty or if obsolete template was stored
+        const validTemplates = ['resmi_kedinasan', 'garuda_emas', 'cyber_smart_id', 'batik_nusantara', 'minimalis_modern', 'kartu_hijau_islami'];
+        if (!parsed.templateStyle || !validTemplates.includes(parsed.templateStyle)) {
           parsed.templateStyle = 'resmi_kedinasan';
         }
         // Ensure new uploaded Aceh Government and School logos are used

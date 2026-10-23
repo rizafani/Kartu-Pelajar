@@ -49,7 +49,6 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [activeTab, setActiveTab] = useState<'template' | 'theme' | 'layout' | 'school' | 'legal' | 'back'>('template');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [isFlipping, setIsFlipping] = useState(false);
-  const [zoomScale, setZoomScale] = useState<number>(1.2);
   const [copiedLink, setCopiedLink] = useState(false);
 
   const currentStudent = students.find((s) => s.id === selectedStudentId) || students[0];
@@ -148,10 +147,10 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             </button>
           </div>
 
-          {/* Interactive Card Canvas with 3D Flip transition */}
-          <div className="relative py-4 flex items-center justify-center min-h-[360px] w-full overflow-hidden">
+          {/* Interactive Card Canvas with 3D Flip transition - Direct Full Preview */}
+          <div className="relative py-3 sm:py-5 flex items-center justify-center w-full overflow-hidden">
             <div
-              className={`transition-transform duration-200 ease-in-out ${
+              className={`w-full max-w-[520px] flex items-center justify-center transition-transform duration-200 ease-in-out ${
                 isFlipping ? 'scale-90 opacity-70 rotate-y-90' : 'scale-100 opacity-100'
               }`}
             >
@@ -160,53 +159,43 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                   student={currentStudent}
                   settings={settings}
                   side={cardSide}
-                  scale={zoomScale}
+                  autoFit={true}
                   onOpenVerification={onOpenVerification}
                 />
               )}
             </div>
           </div>
 
-          {/* Bottom Zoom & Export Action Bar */}
-          <div className="w-full pt-3 mt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-            {/* Zoom controls */}
-            <div className="flex items-center gap-2 text-slate-600">
-              <span className="text-[11px] font-medium">Skala:</span>
-              <button
-                onClick={() => setZoomScale(1.0)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                  zoomScale === 1.0 ? 'bg-slate-900 text-white' : 'bg-slate-200 hover:bg-slate-300'
-                }`}
-              >
-                100%
-              </button>
-              <button
-                onClick={() => setZoomScale(1.2)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                  zoomScale === 1.2 ? 'bg-slate-900 text-white' : 'bg-slate-200 hover:bg-slate-300'
-                }`}
-              >
-                120%
-              </button>
-              <button
-                onClick={() => setZoomScale(1.35)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer ${
-                  zoomScale === 1.35 ? 'bg-slate-900 text-white' : 'bg-slate-200 hover:bg-slate-300'
-                }`}
-              >
-                135%
-              </button>
+          {/* Bottom Action Bar (Zoom/Persen dihilangkan, kartu otomatis fit penuh) */}
+          <div className="w-full pt-3 mt-1 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+            {/* Indikator Tampilan Penuh Otomatis */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Tampilan Penuh Otomatis (CR-80 ISO)
+              </span>
             </div>
 
-            {/* Quick Export Button */}
+            {/* Quick Export & Flip Buttons */}
             {currentStudent && (
-              <button
-                onClick={() => onExportSingleCard(currentStudent, cardSide)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Simpan Gambar ({cardSide === 'front' ? 'Depan' : 'Belakang'})</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFlip}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                  title="Balik ke sisi depan atau belakang kartu"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Lihat {cardSide === 'front' ? 'Belakang' : 'Depan'}</span>
+                </button>
+
+                <button
+                  onClick={() => onExportSingleCard(currentStudent, cardSide)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh PNG ({cardSide === 'front' ? 'Depan' : 'Belakang'})</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -370,34 +359,50 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                   {
                     id: 'resmi_kedinasan' as CardTemplateStyle,
                     title: 'Resmi Kedinasan Nasional',
-                    badge: 'Standar Resmi Dinas (Rekomendasi)',
+                    badge: 'Standar Resmi Dinas (Utama)',
                     badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-                    desc: 'Kop Surat Dinas Pendidikan lengkap dengan garis ganda resmi (2px tebal + 0.75px tipis), susunan tabel identitas dengan titik dua sejajar, pas foto formal, dan pengesahan stempel basah.',
+                    desc: 'Kop Surat Dinas Pendidikan dengan garis ganda resmi (tebal & tipis), logo sekolah di kiri & logo Pemerintah Aceh di kanan, pas foto formal dengan badge NIS, tabel identitas presisi, dan pengesahan Kepala Sekolah berstempel dinas.',
                     icon: '🏛️',
                   },
                   {
-                    id: 'smart_card' as CardTemplateStyle,
-                    title: 'Smart Card Elektronik ID-1',
+                    id: 'garuda_emas' as CardTemplateStyle,
+                    title: 'Garuda Presisi Keemasan',
+                    badge: 'Presidential Gold Edition',
+                    badgeColor: 'bg-amber-100 text-amber-800 border-amber-300',
+                    desc: 'Aksen pita emas royal kebangsaan, latar sekuriti guilloche elegan berbalut lambang negara, bingkai foto keemasan, dan tipografi monarki kedinasan yang mewah dan berwibawa tinggi.',
+                    icon: '🦅',
+                  },
+                  {
+                    id: 'cyber_smart_id' as CardTemplateStyle,
+                    title: 'Smart Card Elektronik ID & RFID',
                     badge: 'Kartu Pintar ISO-7810',
-                    badgeColor: 'bg-blue-100 text-blue-800 border-blue-300',
-                    desc: 'Visual Chip Kontak Emas EMV, watermark guilloche sekuriti anti-pemalsuan, pita magnetik digital, dan identitas terstruktur modern.',
+                    badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+                    desc: 'Tampilan smart card futuristik dengan visual Gold EMV Chip, ikon transmisi nirkabel RFID/NFC contactless, indikator sekuriti digital, dan identitas kartu pelajar terintegrasi.',
                     icon: '💳',
                   },
                   {
-                    id: 'classic_kop' as CardTemplateStyle,
-                    title: 'Klasik Kop Surat Pemda',
-                    badge: 'Format Tradisional',
-                    badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
-                    desc: 'Kop surat formal Pemerintah Daerah & Cabang Dinas Pendidikan dengan garis batas tegas hitam dan susunan berkas dinas.',
-                    icon: '📜',
+                    id: 'batik_nusantara' as CardTemplateStyle,
+                    title: 'Warisan Nusantara & Ornamen Aceh',
+                    badge: 'Karakter Budaya Luhur',
+                    badgeColor: 'bg-rose-100 text-rose-800 border-rose-300',
+                    desc: 'Memadukan kebanggaan kearifan lokal dengan ornamen etnik Pintu Aceh & songket nusantara di sudut kartu, pita marun-emas agung, dan stempel jaminan keaslian.',
+                    icon: '🏮',
                   },
                   {
-                    id: 'canva_modern' as CardTemplateStyle,
-                    title: 'Grafis Gelombang Modern (Canva)',
-                    badge: 'Kreatif Dinamis',
-                    badgeColor: 'bg-sky-100 text-sky-800 border-sky-300',
-                    desc: 'Tata letak modern dengan gelombang aksen biru tua, garis cyan, dan pola dot matrix geometris.',
-                    icon: '🎨',
+                    id: 'minimalis_modern' as CardTemplateStyle,
+                    title: 'Metro Studio Minimalis Kontemporer',
+                    badge: 'Modern Swiss Typography',
+                    badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
+                    desc: 'Desain ultra-modern yang bersih dan elegan dengan hierarki tipografi tegas, tata letak asimetris kontras tinggi, foto framed tajam, dan QR verifikasi yang menonjol.',
+                    icon: '✨',
+                  },
+                  {
+                    id: 'kartu_hijau_islami' as CardTemplateStyle,
+                    title: 'Zamrud Islami Serambi Mekkah',
+                    badge: 'Khas Pendidikan Aceh',
+                    badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                    desc: 'Nuansa syiar pendidikan Serambi Mekkah dengan sentuhan hijau zamrud menyejukkan, ornamen geometris islami keemasan, dan kop surat berwibawa tinggi.',
+                    icon: '🕌',
                   },
                 ].map((tmpl) => {
                   const isSelected = settings.templateStyle === tmpl.id;

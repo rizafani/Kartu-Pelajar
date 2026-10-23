@@ -48,12 +48,12 @@ export const SingleCardModal: React.FC<SingleCardModalProps> = ({
         </div>
 
         {/* Card display */}
-        <div className="py-6 flex items-center justify-center w-full">
+        <div className="py-4 sm:py-6 flex items-center justify-center w-full overflow-hidden">
           <StudentCard
             student={student}
             settings={settings}
             side={side}
-            scale={1.25}
+            autoFit={true}
             onOpenVerification={onOpenVerification}
           />
         </div>

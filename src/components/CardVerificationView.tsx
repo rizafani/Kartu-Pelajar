@@ -227,10 +227,10 @@ export const CardVerificationView: React.FC<CardVerificationViewProps> = ({
                     </button>
                   </div>
 
-                  {/* Card Display with Flip Transition */}
-                  <div className="py-2 flex items-center justify-center overflow-hidden w-full min-h-[320px]">
+                  {/* Card Display with Flip Transition - Auto Responsive */}
+                  <div className="py-2 flex items-center justify-center overflow-hidden w-full min-h-[240px] sm:min-h-[300px]">
                     <div
-                      className={`transition-transform duration-200 ease-in-out ${
+                      className={`w-full max-w-[480px] flex items-center justify-center transition-transform duration-200 ease-in-out ${
                         isFlipping ? 'scale-90 opacity-70 rotate-y-90' : 'scale-100 opacity-100'
                       }`}
                     >
@@ -238,7 +238,7 @@ export const CardVerificationView: React.FC<CardVerificationViewProps> = ({
                         student={student}
                         settings={settings}
                         side={cardSide}
-                        scale={1.12}
+                        autoFit={true}
                         showShadow={true}
                       />
                     </div>

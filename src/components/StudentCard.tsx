@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { CardSettings, Student } from '../types';
 import {
   generateBarcodeSvg,
@@ -6,7 +6,7 @@ import {
   getQrStringForStudent,
   buildStudentVerificationUrl,
 } from '../utils/barcodeGenerator';
-import { MapPin, Globe, Mail, Calendar, UserCheck, ShieldCheck, Wifi } from 'lucide-react';
+import { MapPin, Globe, Mail, Calendar, UserCheck, ShieldCheck, Wifi, Sparkles, Award, Star, Cpu } from 'lucide-react';
 import { GOLD_EMV_CHIP_SVG, SECURITY_GUILLOCHE_SVG } from '../data/defaults';
 
 interface StudentCardProps {
@@ -14,6 +14,7 @@ interface StudentCardProps {
   settings: CardSettings;
   side?: 'front' | 'back';
   scale?: number;
+  autoFit?: boolean;
   className?: string;
   showShadow?: boolean;
   onOpenVerification?: (student: Student) => void;
@@ -23,13 +24,52 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   student,
   settings,
   side = 'front',
-  scale = 1,
+  scale,
+  autoFit = true,
   className = '',
   showShadow = true,
   onOpenVerification,
 }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const isLandscape = settings.orientation === 'landscape';
+
+  // Responsive container width observer
+  useEffect(() => {
+    if (!autoFit) return;
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const parent = el.parentElement;
+      const width = parent ? parent.clientWidth : el.clientWidth;
+      if (width > 0) {
+        setContainerWidth(width);
+      }
+    };
+
+    measure();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      const target = el.parentElement || el;
+      ro = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0) {
+            setContainerWidth(entry.contentRect.width);
+          }
+        }
+      });
+      ro.observe(target);
+    }
+
+    window.addEventListener('resize', measure);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [autoFit]);
 
   const handleQrClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -343,149 +383,407 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   );
 
   // --------------------------------------------------------------------------
-  // TEMPLATE 2: SMART CARD (Modern Government Electronic ID with EMV Chip)
+  // TEMPLATE 2: GARUDA PRESISI KEEMASAN (Presidential Gold Edition)
   // --------------------------------------------------------------------------
-  const renderSmartCard = () => (
-    <div className="relative w-full h-full text-slate-800 z-10 overflow-hidden flex flex-col justify-between">
-      {/* Background Guilloche Pattern */}
+  const renderGarudaEmas = () => (
+    <div className="relative w-full h-full text-slate-900 z-10 overflow-hidden flex flex-col justify-between">
+      {/* Background Guilloche Security Linework with Golden Tint */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-15 z-0 bg-repeat"
+        className="absolute inset-0 pointer-events-none opacity-25 z-0 bg-repeat"
         style={{ backgroundImage: `url("${SECURITY_GUILLOCHE_SVG}")` }}
       />
 
-      {/* Top Smart ID Header */}
+      {/* Top Gold Foil Royal Banner */}
+      <div className="w-full pt-1.5 px-3 pb-1 bg-gradient-to-r from-amber-600 via-amber-400 to-amber-600 shadow-xs z-20 flex flex-col">
+        <div className="flex items-center justify-between gap-2">
+          {/* Logo Sekolah */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="p-0.5 rounded-full bg-white/90 shadow-2xs">
+              <img
+                src={settings.schoolLogo}
+                alt="Logo Sekolah"
+                className="h-10 w-10 object-contain drop-shadow-xs"
+              />
+            </div>
+          </div>
+
+          {/* Kop Teks Royal Gold */}
+          <div className="flex-1 text-center px-1">
+            <h4 className="text-[7.5px] font-black uppercase tracking-widest text-amber-950 drop-shadow-2xs leading-tight">
+              {settings.provinsiText || 'PEMERINTAH ACEH'}
+            </h4>
+            <h5 className="text-[7px] font-bold uppercase tracking-wider text-amber-900 leading-tight">
+              {settings.dinasText || 'DINAS PENDIDIKAN'}
+            </h5>
+            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-slate-950">
+              {settings.schoolName || 'SMA NEGERI 1 JULOK'}
+            </h1>
+            <p className="text-[6px] text-amber-950 font-bold leading-tight truncate max-w-[280px] mx-auto opacity-90">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+          </div>
+
+          {/* Logo Pemerintah Aceh / Garuda */}
+          <div className="flex-shrink-0 flex items-center justify-end">
+            {settings.showPancasila && (
+              <div className="p-0.5 rounded-full bg-white/90 shadow-2xs">
+                <img
+                  src={settings.pancasilaLogo}
+                  alt="Logo Pemerintah Aceh"
+                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Double Gold Line Rim */}
+        <div className="w-full mt-1 flex flex-col gap-0.5">
+          <div className="w-full h-[2px] bg-amber-900/40" />
+          <div className="w-full h-[0.75px] bg-amber-950/20" />
+        </div>
+      </div>
+
+      {/* Sub-header Bar: Card Title */}
       <div
-        className="w-full pt-2 pb-1.5 px-3 flex items-center justify-between text-white shadow-2xs z-20"
+        className="w-full py-0.5 px-3 flex items-center justify-between text-white shadow-2xs z-20"
         style={{
-          background: `linear-gradient(135deg, ${primaryCol} 0%, ${secondaryCol} 100%)`,
+          background: `linear-gradient(90deg, ${primaryCol} 0%, #1e293b 100%)`,
+        }}
+      >
+        <span className="text-[8px] font-black uppercase tracking-widest text-amber-300 flex items-center gap-1">
+          <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+        </span>
+        <span className="text-[7.5px] font-mono font-black text-amber-300 tracking-wider">
+          NISN: {student.nisn}
+        </span>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
+        {/* Kolom Kiri: Foto dengan Bingkai Emas */}
+        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+          <div className="relative p-1 rounded bg-gradient-to-b from-amber-400 via-yellow-200 to-amber-500 shadow-xs">
+            <div
+              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              style={{
+                borderRadius:
+                  settings.photoBorderRadius === 'circle'
+                    ? '50%'
+                    : settings.photoBorderRadius === 'square'
+                    ? '0px'
+                    : '4px',
+              }}
+            >
+              {student.foto ? (
+                <img
+                  src={student.foto}
+                  alt={student.nama}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-blue-700 text-white p-1 text-center">
+                  <span className="text-[10px] font-bold">Pas Foto</span>
+                  <span className="text-[8px] opacity-80">3 x 4</span>
+                </div>
+              )}
+
+              {/* Hologram Badge */}
+              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500 py-0.5 text-[5.5px] font-black text-center text-amber-950 uppercase tracking-widest shadow-2xs">
+                ★ ORIGINAL ★
+              </div>
+            </div>
+          </div>
+
+          {/* Badge NIS */}
+          <div className="mt-1 text-center w-full bg-amber-50 rounded border border-amber-300 py-0.5 px-1 shadow-2xs">
+            <span className="text-[7.5px] font-mono font-extrabold text-amber-950 leading-none block">
+              NIS: {student.nis || '-'}
+            </span>
+            <span className="text-[5.5px] font-bold text-emerald-800 uppercase tracking-tighter block mt-0.5">
+              ● SISWA AKTIF
+            </span>
+          </div>
+        </div>
+
+        {/* Kolom Tengah: Tabel Identitas Siswa Resmi */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <table className="w-full text-[8.5px] leading-tight border-collapse">
+            <tbody>
+              <tr className="border-b border-amber-100">
+                <td className="w-[74px] font-bold text-slate-700 py-[3px] whitespace-nowrap text-[8px]">
+                  NIS / NISN
+                </td>
+                <td className="w-[8px] text-center text-amber-600 font-bold">:</td>
+                <td className="font-mono font-extrabold text-slate-900 py-[3px]">
+                  {student.nis || '-'} / {student.nisn}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="font-bold text-slate-700 py-[3px] whitespace-nowrap text-[8px]">
+                  Nama Lengkap
+                </td>
+                <td className="text-center text-amber-600 font-bold">:</td>
+                <td
+                  className="font-black uppercase tracking-tight py-[3px] text-[9.5px] truncate max-w-[160px]"
+                  style={{ color: primaryCol }}
+                >
+                  {student.nama}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="font-bold text-slate-700 py-[3px] whitespace-nowrap text-[8px]">
+                  Tempat, Tgl Lahir
+                </td>
+                <td className="text-center text-amber-600 font-bold">:</td>
+                <td className="font-bold text-slate-800 py-[3px] truncate max-w-[160px]">
+                  {formatTtl()}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="font-bold text-slate-700 py-[3px] whitespace-nowrap text-[8px]">
+                  Jenis Kelamin
+                </td>
+                <td className="text-center text-amber-600 font-bold">:</td>
+                <td className="font-semibold text-slate-800 py-[3px]">
+                  {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-100">
+                <td className="font-bold text-slate-700 py-[3px] whitespace-nowrap align-top text-[8px]">
+                  Alamat
+                </td>
+                <td className="text-center text-amber-600 font-bold align-top">:</td>
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[160px]">
+                  {student.alamat || '-'}
+                </td>
+              </tr>
+              <tr>
+                <td className="font-bold text-slate-700 py-[3px] whitespace-nowrap text-[8px]">
+                  Berlaku S/D
+                </td>
+                <td className="text-center text-amber-600 font-bold">:</td>
+                <td className="font-black text-emerald-800 py-[3px]">
+                  {formatBerlaku()} <span className="font-normal text-[7px] text-slate-500">(Aktif)</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Kolom Kanan: QR Code Emas & Pengesahan */}
+        <div className="w-[102px] flex flex-col items-center justify-between text-center flex-shrink-0 border-l border-amber-200 pl-1.5 py-0.5">
+          {qrDataUrl && (
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="bg-amber-50 p-1 rounded border border-amber-400 shadow-2xs flex flex-col items-center cursor-pointer hover:border-amber-600 hover:ring-2 hover:ring-amber-400/40 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Validasi"
+                className="w-[52px] h-[52px] object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5px] font-mono text-amber-900 font-black block mt-0.5 tracking-tight group-hover:underline">
+                ★ SCAN VERIFIKASI ★
+              </span>
+            </div>
+          )}
+
+          {/* Pengesahan Kepala Sekolah */}
+          <div className="w-full relative mt-0.5">
+            <p className="text-[6.5px] font-medium text-slate-600 leading-none">
+              {settings.kotaPenerbit || 'Julok'}, {settings.tanggalTerbit || '15 Juli 2024'}
+            </p>
+            <p className="text-[7px] font-extrabold text-slate-800 leading-tight">
+              {settings.kepalaSekolahJabatan || 'Kepala Sekolah'}
+            </p>
+
+            <div className="relative h-7 w-full flex items-center justify-center my-0.5">
+              {settings.showStempel && settings.stempelUrl && (
+                <img
+                  src={settings.stempelUrl}
+                  alt="Stempel Dinas"
+                  className="absolute -top-1.5 left-0.5 w-10 h-10 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-90 z-20"
+                />
+              )}
+              {settings.showTandaTangan && settings.tandaTanganUrl && (
+                <img
+                  src={settings.tandaTanganUrl}
+                  alt="TTD"
+                  className="w-18 h-7 object-contain relative z-10"
+                />
+              )}
+            </div>
+
+            <p className="text-[7.5px] font-black text-slate-900 underline underline-offset-1 leading-none truncate max-w-[100px] mx-auto">
+              {settings.kepalaSekolahNama || 'Irmi, S.Pd., M.Pd'}
+            </p>
+            <p className="text-[5.5px] font-mono text-slate-600 mt-0.5 leading-none">
+              NIP. {settings.kepalaSekolahNip || '1980102 200504 2 001'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Bar Garuda Emas */}
+      <div
+        className="w-full py-1 px-3 flex items-center justify-between text-amber-200 text-[6.5px] font-bold z-20 tracking-wider bg-slate-900 border-t border-amber-500/50"
+      >
+        <span>PRESIDENTIAL GOLD EDITION • DINAS PENDIDIKAN PROVINSI ACEH</span>
+        <span className="font-mono text-amber-400">GARUDA CR80 RESMI</span>
+      </div>
+    </div>
+  );
+
+  // --------------------------------------------------------------------------
+  // TEMPLATE 3: CYBER SMART ID (High-Tech Electronic ID-1 & RFID Pass)
+  // --------------------------------------------------------------------------
+  const renderCyberSmartId = () => (
+    <div className="relative w-full h-full text-slate-900 z-10 overflow-hidden flex flex-col justify-between bg-slate-50">
+      {/* Background Circuit Grid Pattern */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-10 z-0 bg-repeat"
+        style={{ backgroundImage: `url("${SECURITY_GUILLOCHE_SVG}")` }}
+      />
+
+      {/* Top Cyber Smart Header */}
+      <div
+        className="w-full pt-1.5 pb-1 px-3 flex items-center justify-between text-white shadow-xs z-20"
+        style={{
+          background: `linear-gradient(135deg, #0f172a 0%, #1e293b 60%, ${primaryCol} 100%)`,
         }}
       >
         <div className="flex items-center gap-2">
           <img
             src={settings.schoolLogo}
-            alt="Logo"
+            alt="Logo Sekolah"
             className="w-8 h-8 object-contain drop-shadow-xs"
           />
           <div>
-            <h1 className="text-[12px] font-black uppercase tracking-wider leading-none">
+            <h1 className="text-[11px] font-black uppercase tracking-wider leading-none text-white">
               {settings.schoolName || 'SMA NEGERI 1 JULOK'}
             </h1>
-            <p className="text-[6.5px] text-slate-200 font-medium tracking-wide mt-0.5">
-              {settings.provinsiText || 'PEMERINTAH ACEH'} • SMART STUDENT ID
+            <p className="text-[6.5px] text-cyan-300 font-mono tracking-wide mt-0.5">
+              {settings.provinsiText || 'PEMERINTAH ACEH'} • SMART CARD ID-1
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="rotate-90">
-            <Wifi className="w-4 h-4 text-amber-300" />
+            <Wifi className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
           </div>
-          <span
-            className="text-[7.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded border"
-            style={{
-              backgroundColor: `${accentCol}25`,
-              borderColor: accentCol,
-              color: accentCol,
-            }}
-          >
-            SMART CARD
+          <span className="text-[6.5px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded bg-cyan-950 border border-cyan-400 text-cyan-300">
+            RFID ACTIVE
           </span>
+          {settings.showPancasila && (
+            <img
+              src={settings.pancasilaLogo}
+              alt="Logo Pemerintah Aceh"
+              className="w-7 h-8 object-contain drop-shadow-xs"
+            />
+          )}
         </div>
       </div>
 
-      {/* Main Content: EMV Chip + Photo + Tabular Data */}
-      <div className="flex-1 px-2.5 py-1.5 flex items-stretch gap-2.5 z-20">
-        {/* Left: Photo & EMV Chip */}
-        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px]">
-          {/* Gold EMV Chip */}
-          <div className="w-11 h-7.5 rounded overflow-hidden shadow-xs border border-amber-600/40">
+      {/* Main Body */}
+      <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
+        {/* Left: EMV Chip + Photo */}
+        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+          {/* Gold EMV Chip Simulation */}
+          <div className="w-10 h-7 rounded overflow-hidden shadow-xs border border-amber-600/50 bg-amber-50">
             <img src={GOLD_EMV_CHIP_SVG} alt="Smart Chip" className="w-full h-full object-cover" />
           </div>
 
           {/* Photo */}
           <div
-            className="relative overflow-hidden bg-slate-200 border-2 border-slate-700/80 shadow-xs w-full"
-            style={{
-              height: '102px',
-              borderRadius: '4px',
-            }}
+            className="relative overflow-hidden bg-slate-200 border-2 border-slate-700 shadow-xs w-[76px] h-[92px] mt-1"
+            style={{ borderRadius: '4px' }}
           >
             {student.foto ? (
               <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-blue-700 text-white text-[9px] font-bold">
-                Foto 3x4
+              <div className="w-full h-full flex flex-col items-center justify-center bg-blue-700 text-white p-1 text-center">
+                <span className="text-[9px] font-bold">Foto</span>
+                <span className="text-[7.5px] opacity-80">3 x 4</span>
               </div>
             )}
+            <div className="absolute top-0 right-0 bg-cyan-600 text-[5px] font-mono text-white px-1 font-bold">
+              PASS
+            </div>
           </div>
 
-          <div className="text-center w-full bg-slate-100 rounded border border-slate-300 py-0.5">
-            <span className="text-[7px] font-mono font-bold text-slate-800">
+          <div className="text-center w-full bg-slate-200/80 rounded border border-slate-300 py-0.5 mt-0.5">
+            <span className="text-[6.5px] font-mono font-extrabold text-slate-800">
               NIS: {student.nis || '-'}
             </span>
           </div>
         </div>
 
-        {/* Center: Identity Table */}
+        {/* Center: Identity Block */}
         <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-          <div className="border-b border-slate-200 pb-1 mb-0.5">
+          <div className="border-b border-slate-200 pb-1">
             <h3
               className="text-[11px] font-black uppercase tracking-tight truncate leading-tight"
               style={{ color: primaryCol }}
             >
               {student.nama}
             </h3>
-            <p className="text-[8px] font-mono font-bold text-slate-700">
-              NISN: {student.nisn}
+            <p className="text-[8px] font-mono font-bold text-slate-700 flex items-center gap-1.5">
+              <span>NISN: {student.nisn}</span>
+              <span className="text-[6px] font-sans px-1 rounded bg-cyan-100 text-cyan-800 border border-cyan-200">
+                TERVERIFIKASI
+              </span>
             </p>
           </div>
 
-          <table className="w-full text-[8px] leading-tight">
+          <table className="w-full text-[8.5px] leading-tight border-collapse mt-0.5">
             <tbody>
               <tr className="border-b border-slate-100">
-                <td className="w-[68px] font-bold text-slate-500 py-1">TTL</td>
+                <td className="w-[70px] font-bold text-slate-600 py-[3px] text-[8px]">TTL</td>
                 <td className="w-2 font-bold text-slate-400">:</td>
-                <td className="font-semibold text-slate-800 py-1">{formatTtl()}</td>
+                <td className="font-semibold text-slate-800 py-[3px] truncate max-w-[150px]">{formatTtl()}</td>
               </tr>
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-500 py-1">Jenis Kelamin</td>
+                <td className="font-bold text-slate-600 py-[3px] text-[8px]">Jenis Kelamin</td>
                 <td className="font-bold text-slate-400">:</td>
-                <td className="font-semibold text-slate-800 py-1">
+                <td className="font-semibold text-slate-800 py-[3px]">
                   {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
                 </td>
               </tr>
-
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-500 py-1">Alamat</td>
-                <td className="font-bold text-slate-400">:</td>
-                <td className="font-medium text-slate-700 truncate max-w-[150px] py-1">
+                <td className="font-bold text-slate-600 py-[3px] text-[8px] align-top">Alamat</td>
+                <td className="font-bold text-slate-400 align-top">:</td>
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[150px]">
                   {student.alamat || '-'}
                 </td>
               </tr>
               <tr>
-                <td className="font-bold text-slate-500 py-1">Berlaku</td>
+                <td className="font-bold text-slate-600 py-[3px] text-[8px]">Berlaku S/D</td>
                 <td className="font-bold text-slate-400">:</td>
-                <td className="font-extrabold text-emerald-800 py-1">{formatBerlaku()}</td>
+                <td className="font-black text-emerald-700 py-[3px]">{formatBerlaku()} (Aktif)</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {/* Right: QR Code & Validation */}
+        {/* Right: QR Code & Endorsement */}
         <div className="w-[96px] flex flex-col items-center justify-between flex-shrink-0 text-center pl-1.5 border-l border-slate-200 py-0.5">
           {qrDataUrl && (
             <div
               onClick={handleQrClick}
               title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
-              className="p-1 bg-white rounded border border-slate-200 shadow-2xs cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/30 transition-all group"
+              className="p-1 bg-white rounded border border-cyan-400 shadow-2xs cursor-pointer hover:border-cyan-600 hover:ring-2 hover:ring-cyan-400/40 transition-all group"
             >
               <img
                 src={qrDataUrl}
                 alt="QR Code"
-                className="w-13 h-13 object-contain group-hover:scale-105 transition-transform"
+                className="w-12 h-12 object-contain group-hover:scale-105 transition-transform"
               />
-              <span className="text-[5.5px] font-mono text-blue-700 font-extrabold block mt-0.5 group-hover:underline">
-                KLIK / SCAN ID
+              <span className="text-[5px] font-mono text-cyan-800 font-extrabold block mt-0.5 group-hover:underline">
+                SCAN SMART ID
               </span>
             </div>
           )}
@@ -493,385 +791,665 @@ export const StudentCard: React.FC<StudentCardProps> = ({
           <div className="w-full relative mt-0.5">
             <p className="text-[6px] text-slate-600 font-medium">{settings.kotaPenerbit}, {settings.tanggalTerbit}</p>
             <p className="text-[6.5px] font-bold text-slate-800">{settings.kepalaSekolahJabatan}</p>
-            <div className="relative h-7 w-full flex items-center justify-center my-0.5">
+            <div className="relative h-6 w-full flex items-center justify-center my-0.5">
               {settings.showStempel && settings.stempelUrl && (
                 <img
                   src={settings.stempelUrl}
                   alt="Stempel"
-                  className="absolute -top-1 left-0 w-9 h-9 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-85 z-20"
+                  className="absolute -top-1 left-0 w-8 h-8 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-85 z-20"
                 />
               )}
               {settings.showTandaTangan && settings.tandaTanganUrl && (
                 <img
                   src={settings.tandaTanganUrl}
                   alt="TTD"
-                  className="w-16 h-7 object-contain relative z-10 mx-auto"
+                  className="w-16 h-6 object-contain relative z-10 mx-auto"
                 />
               )}
             </div>
-            <p className="text-[7px] font-bold text-slate-900 underline truncate max-w-[94px] mx-auto">
+            <p className="text-[7px] font-black text-slate-900 underline truncate max-w-[94px] mx-auto">
               {settings.kepalaSekolahNama}
             </p>
-            <p className="text-[5px] font-mono text-slate-600 mt-0.5">NIP. {settings.kepalaSekolahNip}</p>
+            <p className="text-[5px] font-mono text-slate-600">NIP. {settings.kepalaSekolahNip}</p>
           </div>
         </div>
       </div>
 
-      {/* Bottom Magnetic Contact Bar */}
+      {/* Bottom Smart Bar */}
       <div
-        className="w-full py-1 px-3 flex items-center justify-between text-white text-[6.5px] font-mono z-20 font-bold"
-        style={{ backgroundColor: primaryCol }}
+        className="w-full py-1 px-3 flex items-center justify-between text-white text-[6px] font-mono z-20 font-bold"
+        style={{ backgroundColor: '#0f172a' }}
       >
-        <span>INTEGRATED ELECTRONIC ID SYSTEM</span>
-        <span>VALID THRU: {formatBerlaku()}</span>
+        <span className="text-cyan-300">ISO/IEC 7810 ID-1 • SMART ELECTRONIC PASS</span>
+        <span className="text-slate-300">VALID THRU: {formatBerlaku()}</span>
       </div>
     </div>
   );
 
   // --------------------------------------------------------------------------
-  // TEMPLATE 3: KLASIK KOP PEMDA (Traditional Government Official Card)
+  // TEMPLATE 4: BATIK NUSANTARA & ORNAMEN ACEH (Cultural Heritage Edition)
   // --------------------------------------------------------------------------
-  const renderClassicKop = () => (
-    <div className="relative w-full h-full text-slate-800 z-10 overflow-hidden flex flex-col justify-between p-2">
-      {/* Background watermark */}
+  const renderBatikNusantara = () => (
+    <div className="relative w-full h-full text-slate-900 z-10 overflow-hidden flex flex-col justify-between bg-amber-50/30">
+      {/* Background Batik Motif Watermark */}
       <div
         className="absolute inset-0 pointer-events-none opacity-20 z-0 bg-repeat"
         style={{ backgroundImage: `url("${SECURITY_GUILLOCHE_SVG}")` }}
       />
 
-      {/* Traditional Formal Kop */}
-      <div className="w-full pb-1 border-b-[2px] border-black z-20 flex items-center justify-between">
-        <img
-          src={settings.schoolLogo}
-          alt="Logo Sekolah"
-          className="h-10 w-10 object-contain"
-        />
-        <div className="text-center px-1 flex-1">
-          <p className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-800">
-            {settings.provinsiText}
-          </p>
-          <p className="text-[7px] font-bold uppercase text-slate-700">
-            {settings.dinasText}
-          </p>
-          <h2 className="text-[12px] font-black uppercase text-slate-900 leading-tight">
-            {settings.schoolName}
-          </h2>
-          <p className="text-[6px] text-slate-600 font-semibold">
-            {settings.schoolAddress} • NPSN: {settings.npsn}
-          </p>
+      {/* Top Traditional Kop Surat */}
+      <div className="w-full pt-2 px-3 pb-1 bg-gradient-to-r from-red-950 via-rose-900 to-amber-950 text-white z-20 shadow-xs flex flex-col">
+        <div className="flex items-center justify-between gap-2">
+          {/* Logo Sekolah */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="p-0.5 rounded-lg bg-white/95 shadow-2xs">
+              <img
+                src={settings.schoolLogo}
+                alt="Logo Sekolah"
+                className="h-10 w-10 object-contain drop-shadow-xs"
+              />
+            </div>
+          </div>
+
+          {/* Kop Teks Budaya */}
+          <div className="flex-1 text-center px-1">
+            <h4 className="text-[7.5px] font-black uppercase tracking-widest text-amber-300 drop-shadow-2xs leading-tight">
+              {settings.provinsiText || 'PEMERINTAH ACEH'}
+            </h4>
+            <h5 className="text-[7px] font-bold uppercase tracking-wider text-rose-200 leading-tight">
+              {settings.dinasText || 'DINAS PENDIDIKAN'}
+            </h5>
+            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
+              {settings.schoolName || 'SMA NEGERI 1 JULOK'}
+            </h1>
+            <p className="text-[6px] text-amber-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+          </div>
+
+          {/* Logo Pemerintah Aceh */}
+          <div className="flex-shrink-0 flex items-center justify-end">
+            {settings.showPancasila && (
+              <div className="p-0.5 rounded-lg bg-white/95 shadow-2xs">
+                <img
+                  src={settings.pancasilaLogo}
+                  alt="Logo Pemerintah Aceh"
+                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                />
+              </div>
+            )}
+          </div>
         </div>
-        <img
-          src={settings.pancasilaLogo}
-          alt="Logo Pemerintah Aceh"
-          className="h-10 w-auto max-w-[40px] object-contain"
-        />
+
+        {/* Decorative Ornamen Border */}
+        <div className="w-full mt-1 flex items-center justify-center gap-1">
+          <div className="h-[1.5px] bg-gradient-to-r from-transparent via-amber-400 to-transparent flex-1" />
+          <span className="text-[7px] text-amber-300 font-bold">❖ PINTU ACEH ❖</span>
+          <div className="h-[1.5px] bg-gradient-to-r from-transparent via-amber-400 to-transparent flex-1" />
+        </div>
       </div>
 
-      {/* Title */}
-      <div className="py-0.5 text-center z-20">
-        <h3 className="text-[9px] font-black uppercase tracking-wider underline text-slate-900">
-          {settings.cardTitle || 'KARTU PELAJAR'}
-        </h3>
+      {/* Sub-header Bar: Title */}
+      <div className="w-full py-0.5 px-3 flex items-center justify-between bg-amber-100/90 border-b border-amber-300 text-amber-950 font-black text-[8px] z-20">
+        <span className="uppercase tracking-widest flex items-center gap-1">
+          <Award className="w-3 h-3 text-rose-800" />
+          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+        </span>
+        <span className="font-mono text-rose-900">NISN: {student.nisn}</span>
       </div>
 
-      {/* Data Layout */}
-      <div className="flex-1 flex items-stretch gap-2 z-20 py-0.5">
-        <div className="w-[82px] h-[112px] border-2 border-black bg-slate-100 flex-shrink-0 overflow-hidden rounded-[2px] relative">
-          {student.foto ? (
-            <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-[8px] font-bold">
-              <span>Pas Foto</span>
-              <span className="text-[7px]">3 x 4</span>
+      {/* Content Area */}
+      <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
+        {/* Photo with Batik Corner Accents */}
+        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+          <div className="relative p-1 rounded bg-rose-900 border border-amber-400 shadow-xs">
+            <div
+              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              style={{
+                borderRadius:
+                  settings.photoBorderRadius === 'circle'
+                    ? '50%'
+                    : settings.photoBorderRadius === 'square'
+                    ? '0px'
+                    : '4px',
+              }}
+            >
+              {student.foto ? (
+                <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-rose-950 text-white p-1 text-center">
+                  <span className="text-[10px] font-bold">Pas Foto</span>
+                  <span className="text-[8px] opacity-80">3 x 4</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 bg-rose-950/90 py-0.5 text-[5.5px] font-black text-center text-amber-300 uppercase tracking-widest">
+                WARISAN BANGSA
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-1 text-center w-full bg-rose-50 rounded border border-rose-300 py-0.5 px-1 shadow-2xs">
+            <span className="text-[7.5px] font-mono font-extrabold text-rose-950 leading-none block">
+              NIS: {student.nis || '-'}
+            </span>
+          </div>
+        </div>
+
+        {/* Identity Table */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <table className="w-full text-[8.5px] leading-tight border-collapse">
+            <tbody>
+              <tr className="border-b border-amber-200/80">
+                <td className="w-[74px] font-bold text-rose-950 py-[3px] whitespace-nowrap text-[8px]">
+                  NIS / NISN
+                </td>
+                <td className="w-[8px] text-center text-rose-800 font-bold">:</td>
+                <td className="font-mono font-extrabold text-slate-900 py-[3px]">
+                  {student.nis || '-'} / {student.nisn}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-200/80">
+                <td className="font-bold text-rose-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Nama Lengkap
+                </td>
+                <td className="text-center text-rose-800 font-bold">:</td>
+                <td className="font-black uppercase tracking-tight py-[3px] text-[9.5px] text-rose-900 truncate max-w-[160px]">
+                  {student.nama}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-200/80">
+                <td className="font-bold text-rose-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Tempat, Tgl Lahir
+                </td>
+                <td className="text-center text-rose-800 font-bold">:</td>
+                <td className="font-bold text-slate-800 py-[3px] truncate max-w-[160px]">
+                  {formatTtl()}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-200/80">
+                <td className="font-bold text-rose-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Jenis Kelamin
+                </td>
+                <td className="text-center text-rose-800 font-bold">:</td>
+                <td className="font-semibold text-slate-800 py-[3px]">
+                  {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
+                </td>
+              </tr>
+              <tr className="border-b border-amber-200/80">
+                <td className="font-bold text-rose-950 py-[3px] whitespace-nowrap align-top text-[8px]">
+                  Alamat
+                </td>
+                <td className="text-center text-rose-800 font-bold align-top">:</td>
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[160px]">
+                  {student.alamat || '-'}
+                </td>
+              </tr>
+              <tr>
+                <td className="font-bold text-rose-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Berlaku S/D
+                </td>
+                <td className="text-center text-rose-800 font-bold">:</td>
+                <td className="font-black text-emerald-800 py-[3px]">
+                  {formatBerlaku()} <span className="font-normal text-[7px] text-slate-500">(Aktif)</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Right QR & Endorsement */}
+        <div className="w-[102px] flex flex-col items-center justify-between text-center flex-shrink-0 border-l border-amber-200 pl-1.5 py-0.5">
+          {qrDataUrl && (
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="bg-white p-1 rounded border border-rose-300 shadow-2xs flex flex-col items-center cursor-pointer hover:border-rose-600 hover:ring-2 hover:ring-rose-400/40 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Validasi"
+                className="w-[52px] h-[52px] object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5px] font-mono text-rose-950 font-bold block mt-0.5 group-hover:underline">
+                ❖ SCAN KEASLIAN ❖
+              </span>
             </div>
           )}
-        </div>
 
-        <table className="flex-1 text-[8px] leading-tight border-collapse">
-          <tbody>
-            <tr className="border-b border-slate-200">
-              <td className="w-20 font-bold py-1">NIS / NISN</td>
-              <td>:</td>
-              <td className="font-mono font-bold">{student.nis || '-'} / {student.nisn}</td>
-            </tr>
-            <tr className="border-b border-slate-200">
-              <td className="font-bold py-1">Nama Lengkap</td>
-              <td>:</td>
-              <td className="font-black uppercase text-slate-900 text-[9px]">{student.nama}</td>
-            </tr>
-            <tr className="border-b border-slate-200">
-              <td className="font-bold py-1">Tempat, Tgl Lahir</td>
-              <td>:</td>
-              <td className="font-bold">{formatTtl()}</td>
-            </tr>
-
-            <tr className="border-b border-slate-200">
-              <td className="font-bold py-1">Alamat</td>
-              <td>:</td>
-              <td className="truncate max-w-[140px]">{student.alamat || '-'}</td>
-            </tr>
-            <tr>
-              <td className="font-bold py-1">Berlaku S/D</td>
-              <td>:</td>
-              <td className="font-bold text-emerald-800">{formatBerlaku()}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        {/* Endorsement */}
-        <div className="w-26 text-center text-[6.5px] flex flex-col justify-between py-0.5 border-l border-slate-200 pl-1.5 flex-shrink-0">
-          <div>
-            <p>{settings.kotaPenerbit}, {settings.tanggalTerbit}</p>
-            <p className="font-bold text-[7px]">{settings.kepalaSekolahJabatan}</p>
-          </div>
-          <div className="relative h-7 my-0.5 flex items-center justify-center">
-            {settings.showStempel && settings.stempelUrl && (
-              <img
-                src={settings.stempelUrl}
-                alt=""
-                className="absolute -top-1 left-0 w-9 h-9 object-contain mix-blend-multiply opacity-80"
-              />
-            )}
-            {settings.showTandaTangan && settings.tandaTanganUrl && (
-              <img
-                src={settings.tandaTanganUrl}
-                alt=""
-                className="w-16 h-7 object-contain mx-auto relative z-10"
-              />
-            )}
-          </div>
-          <div>
-            <p className="font-black text-[7.5px] underline">{settings.kepalaSekolahNama}</p>
-            <p className="font-mono text-[5.5px]">NIP. {settings.kepalaSekolahNip}</p>
+          <div className="w-full relative mt-0.5">
+            <p className="text-[6.5px] font-medium text-slate-600 leading-none">
+              {settings.kotaPenerbit || 'Julok'}, {settings.tanggalTerbit || '15 Juli 2024'}
+            </p>
+            <p className="text-[7px] font-extrabold text-slate-800 leading-tight">
+              {settings.kepalaSekolahJabatan || 'Kepala Sekolah'}
+            </p>
+            <div className="relative h-7 w-full flex items-center justify-center my-0.5">
+              {settings.showStempel && settings.stempelUrl && (
+                <img
+                  src={settings.stempelUrl}
+                  alt="Stempel Dinas"
+                  className="absolute -top-1.5 left-0.5 w-10 h-10 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-90 z-20"
+                />
+              )}
+              {settings.showTandaTangan && settings.tandaTanganUrl && (
+                <img
+                  src={settings.tandaTanganUrl}
+                  alt="TTD"
+                  className="w-18 h-7 object-contain relative z-10"
+                />
+              )}
+            </div>
+            <p className="text-[7.5px] font-black text-slate-900 underline underline-offset-1 leading-none truncate max-w-[100px] mx-auto">
+              {settings.kepalaSekolahNama || 'Irmi, S.Pd., M.Pd'}
+            </p>
+            <p className="text-[5.5px] font-mono text-slate-600 mt-0.5 leading-none">
+              NIP. {settings.kepalaSekolahNip || '1980102 200504 2 001'}
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* Bottom Cultural Banner */}
+      <div className="w-full py-1 px-3 flex items-center justify-between text-amber-200 text-[6.5px] font-bold z-20 tracking-wider bg-rose-950">
+        <span>EDISI WARISAN BUDAYA NUSANTARA • DINAS PENDIDIKAN ACEH</span>
+        <span className="font-mono text-amber-300">CR80 RESMI</span>
       </div>
     </div>
   );
 
   // --------------------------------------------------------------------------
-  // TEMPLATE 4: CANVA MODERN (Geometric Curve & Dot Matrix)
+  // TEMPLATE 5: MINIMALIS MODERN (Metro Studio Swiss Typography Style)
   // --------------------------------------------------------------------------
-  const renderCanvaModern = () => (
-    <div className="relative w-full h-full text-slate-800 z-10 overflow-hidden flex flex-col justify-between">
-      {/* 1. TOP LOGO HEADER ROW */}
-      <div className="w-full pt-2.5 px-4 flex items-start justify-between z-20">
-        {/* Logo Kiri: Logo Sekolah */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+  const renderMinimalisModern = () => (
+    <div className="relative w-full h-full text-slate-900 z-10 overflow-hidden flex flex-col justify-between bg-white">
+      {/* Left Vertical Accent Spine */}
+      <div
+        className="absolute left-0 inset-y-0 w-1.5 z-30"
+        style={{ backgroundColor: primaryCol }}
+      />
+
+      {/* Top Modern Header */}
+      <div className="w-full pt-2 pl-4 pr-3 pb-1.5 bg-slate-50 border-b border-slate-200 z-20 flex items-center justify-between">
+        <div className="flex items-center gap-2">
           <img
             src={settings.schoolLogo}
             alt="Logo Sekolah"
-            className="w-11 h-12 object-contain drop-shadow-xs"
+            className="w-9 h-9 object-contain drop-shadow-xs"
           />
-        </div>
-
-        <div className="flex-1 px-2 text-center flex flex-col items-center">
-          <h1
-            className="text-[16px] font-black uppercase tracking-wider leading-none"
-            style={{ color: primaryCol }}
-          >
-            {settings.cardTitle || 'KARTU PELAJAR'}
-          </h1>
-          <h2
-            className="text-[12px] font-extrabold uppercase tracking-wide mt-0.5 leading-tight"
-            style={{ color: primaryCol }}
-          >
-            {settings.schoolName || 'SMA NEGERI 1 JULOK'}
-          </h2>
-
-          <div className="w-full max-w-[210px] flex items-center justify-center gap-1.5 my-0.5">
-            <div className="h-[0.5px] bg-slate-300 flex-1" />
-            <MapPin className="w-2 h-2 text-slate-500 flex-shrink-0" />
-            <div className="h-[0.5px] bg-slate-300 flex-1" />
-          </div>
-
-          <div className="text-[6.5px] text-slate-700 font-semibold leading-tight truncate max-w-[230px]">
-            {settings.schoolAddress}
-          </div>
-          <div className="text-[6px] text-slate-600 font-semibold leading-tight">
-            NPSN ({settings.npsn})
-          </div>
-
-          <div className="mt-0.5 flex items-center justify-center gap-1.5 text-[6px] text-slate-600 font-medium leading-none">
-            <div className="flex items-center gap-0.5">
-              <Globe className="w-1.8 h-1.8 text-slate-500" />
-              <span>{settings.website}</span>
-            </div>
-            <span className="text-slate-300">|</span>
-            <div className="flex items-center gap-0.5">
-              <Mail className="w-1.8 h-1.8 text-slate-500" />
-              <span>{settings.email}</span>
-            </div>
+          <div>
+            <h1
+              className="text-[12px] font-black uppercase tracking-tight leading-none"
+              style={{ color: primaryCol }}
+            >
+              {settings.schoolName || 'SMA NEGERI 1 JULOK'}
+            </h1>
+            <p className="text-[6.5px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+              {settings.provinsiText || 'PEMERINTAH ACEH'} • {settings.dinasText || 'DINAS PENDIDIKAN'}
+            </p>
           </div>
         </div>
 
-        {/* Logo Kanan: Logo Pemerintah Aceh */}
-        <div className="relative flex flex-col items-center flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-[7.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-900 text-white">
+            {settings.cardTitle || 'STUDENT ID'}
+          </span>
           {settings.showPancasila && (
             <img
               src={settings.pancasilaLogo}
               alt="Logo Pemerintah Aceh"
-              className="w-10 h-12 object-contain drop-shadow-xs"
+              className="w-8 h-8 object-contain"
             />
           )}
         </div>
       </div>
 
-      {/* Dot Matrix */}
-      {settings.showDotGrids && (
-        <div className="absolute right-5 top-17 grid grid-cols-8 gap-0.8 pointer-events-none z-10">
-          {Array.from({ length: 40 }).map((_, i) => (
-            <span
-              key={i}
-              className="w-1 h-1 rounded-full"
-              style={{ backgroundColor: accentCol }}
-            />
-          ))}
+      {/* Main Body */}
+      <div className="flex-1 pl-4 pr-3 py-1 flex items-stretch gap-3 z-20 overflow-hidden">
+        {/* Photo */}
+        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+          <div
+            className="relative overflow-hidden bg-slate-200 border border-slate-300 shadow-sm w-[78px] h-[98px]"
+            style={{ borderRadius: '6px' }}
+          >
+            {student.foto ? (
+              <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-white p-1 text-center">
+                <span className="text-[10px] font-bold">Pas Foto</span>
+                <span className="text-[8px] opacity-75">3 x 4</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center w-full bg-slate-100 rounded border border-slate-200 py-0.5 mt-1">
+            <span className="text-[7px] font-mono font-bold text-slate-800">
+              NIS: {student.nis || '-'}
+            </span>
+          </div>
         </div>
-      )}
 
-      {/* Swoop Curve */}
-      <svg
-        className="absolute left-0 bottom-0 pointer-events-none z-10"
-        width="210"
-        height="185"
-        viewBox="0 0 210 185"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M -5 70 C 45 70 85 95 110 135 C 130 165 165 185 205 185"
-          stroke={accentCol}
-          strokeWidth="4"
-          strokeLinecap="round"
-          fill="none"
-        />
-        <path
-          d="M -5 74 C 45 74 85 98 110 138 C 128 165 162 185 200 185 L -5 185 Z"
-          fill={primaryCol}
-        />
-      </svg>
+        {/* Identity Data */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <div className="border-b border-slate-200 pb-1">
+            <h3 className="text-[12px] font-black uppercase tracking-tight text-slate-900 truncate">
+              {student.nama}
+            </h3>
+            <p className="text-[8px] font-mono font-bold text-blue-700">
+              NISN: {student.nisn}
+            </p>
+          </div>
 
-      {/* Student Photo */}
-      <div className="absolute left-6 top-[72px] z-20">
-        <div
-          className="relative overflow-hidden bg-[#0284c7] shadow-sm border-2 border-white"
-          style={{
-            width: '94px',
-            height: '122px',
-            borderRadius:
-              settings.photoBorderRadius === 'circle'
-                ? '50%'
-                : settings.photoBorderRadius === 'square'
-                ? '4px'
-                : '14px',
-          }}
-        >
-          {student.foto ? (
-            <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-[#0284c7] text-white p-2 text-center">
-              <span className="text-[10px] font-bold">Foto Siswa</span>
-              <span className="text-[7.5px] opacity-80">3x4</span>
+          <table className="w-full text-[8.5px] leading-tight border-collapse mt-0.5">
+            <tbody>
+              <tr className="border-b border-slate-100">
+                <td className="w-[74px] font-bold text-slate-500 py-[3px] text-[8px]">TTL</td>
+                <td className="w-2 font-bold text-slate-400">:</td>
+                <td className="font-semibold text-slate-800 py-[3px] truncate max-w-[150px]">{formatTtl()}</td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="font-bold text-slate-500 py-[3px] text-[8px]">Jenis Kelamin</td>
+                <td className="font-bold text-slate-400">:</td>
+                <td className="font-semibold text-slate-800 py-[3px]">
+                  {student.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="font-bold text-slate-500 py-[3px] text-[8px] align-top">Alamat</td>
+                <td className="font-bold text-slate-400 align-top">:</td>
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[150px]">
+                  {student.alamat || '-'}
+                </td>
+              </tr>
+              <tr>
+                <td className="font-bold text-slate-500 py-[3px] text-[8px]">Masa Berlaku</td>
+                <td className="font-bold text-slate-400">:</td>
+                <td className="font-black text-emerald-700 py-[3px]">{formatBerlaku()} (Aktif)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* QR Code & Signature */}
+        <div className="w-[98px] flex flex-col items-center justify-between text-center flex-shrink-0 border-l border-slate-200 pl-2 py-0.5">
+          {qrDataUrl && (
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="p-1 bg-white rounded border border-slate-300 shadow-2xs cursor-pointer hover:border-slate-800 hover:ring-2 hover:ring-slate-400/30 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Code"
+                className="w-12 h-12 object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5px] font-mono text-slate-700 font-bold block mt-0.5 group-hover:underline">
+                VERIFIKASI DIGITAL
+              </span>
             </div>
           )}
+
+          <div className="w-full relative mt-0.5">
+            <p className="text-[6px] text-slate-500 font-medium">{settings.kotaPenerbit}, {settings.tanggalTerbit}</p>
+            <p className="text-[6.5px] font-bold text-slate-800">{settings.kepalaSekolahJabatan}</p>
+            <div className="relative h-6 w-full flex items-center justify-center my-0.5">
+              {settings.showStempel && settings.stempelUrl && (
+                <img
+                  src={settings.stempelUrl}
+                  alt="Stempel"
+                  className="absolute -top-1 left-0 w-8 h-8 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-85 z-20"
+                />
+              )}
+              {settings.showTandaTangan && settings.tandaTanganUrl && (
+                <img
+                  src={settings.tandaTanganUrl}
+                  alt="TTD"
+                  className="w-16 h-6 object-contain relative z-10 mx-auto"
+                />
+              )}
+            </div>
+            <p className="text-[7px] font-black text-slate-900 underline truncate max-w-[94px] mx-auto">
+              {settings.kepalaSekolahNama}
+            </p>
+            <p className="text-[5px] font-mono text-slate-500">NIP. {settings.kepalaSekolahNip}</p>
+          </div>
         </div>
       </div>
 
-      {/* Student Data Block */}
-      <div className="absolute left-[132px] top-[102px] right-[136px] z-20">
-        <div
-          className="pl-2 border-l-[3.5px] py-0.5 leading-tight"
-          style={{ borderColor: primaryCol }}
-        >
-          <h3
-            className="text-[12.5px] font-black uppercase tracking-tight truncate drop-shadow-2xs leading-tight"
-            style={{ color: primaryCol }}
-          >
-            {student.nama}
-          </h3>
-          <div
-            className="text-[10px] font-mono font-extrabold tracking-wider mt-0.5 flex items-center gap-1.5 flex-wrap"
-            style={{ color: primaryCol }}
-          >
-            <span>{student.nisn}</span>
-            {student.nis && (
-              <span className="text-[7.5px] font-sans font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1 py-0.2 rounded">
-                NIS: {student.nis}
-              </span>
+      {/* Bottom Minimalist Bar */}
+      <div className="w-full py-1 pl-4 pr-3 flex items-center justify-between text-slate-600 text-[6.5px] font-semibold bg-slate-100 border-t border-slate-200">
+        <span>KARTU TANDA PELAJAR RESMI • KABUPATEN ACEH TIMUR</span>
+        <span className="font-mono text-slate-800">ISO-7810 CR80</span>
+      </div>
+    </div>
+  );
+
+  // --------------------------------------------------------------------------
+  // TEMPLATE 6: ZAMRUD ISLAMI SERAMBI MEKKAH (Islamic Emerald Acehnese)
+  // --------------------------------------------------------------------------
+  const renderKartuHijauIslami = () => (
+    <div className="relative w-full h-full text-slate-900 z-10 overflow-hidden flex flex-col justify-between bg-emerald-50/40">
+      {/* Background Star Islamic Pattern */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-15 z-0 bg-repeat"
+        style={{ backgroundImage: `url("${SECURITY_GUILLOCHE_SVG}")` }}
+      />
+
+      {/* Top Emerald Islamic Kop */}
+      <div className="w-full pt-2 px-3 pb-1 bg-gradient-to-r from-emerald-950 via-emerald-800 to-teal-950 text-white z-20 shadow-xs flex flex-col">
+        <div className="flex items-center justify-between gap-2">
+          {/* Logo Sekolah */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="p-0.5 rounded-full bg-white shadow-2xs">
+              <img
+                src={settings.schoolLogo}
+                alt="Logo Sekolah"
+                className="h-10 w-10 object-contain drop-shadow-xs"
+              />
+            </div>
+          </div>
+
+          {/* Kop Teks Islami */}
+          <div className="flex-1 text-center px-1">
+            <h4 className="text-[7.5px] font-black uppercase tracking-widest text-emerald-200 drop-shadow-2xs leading-tight">
+              {settings.provinsiText || 'PEMERINTAH ACEH'}
+            </h4>
+            <h5 className="text-[7px] font-bold uppercase tracking-wider text-teal-200 leading-tight">
+              {settings.dinasText || 'DINAS PENDIDIKAN'}
+            </h5>
+            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
+              {settings.schoolName || 'SMA NEGERI 1 JULOK'}
+            </h1>
+            <p className="text-[6px] text-emerald-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+          </div>
+
+          {/* Logo Pemerintah Aceh */}
+          <div className="flex-shrink-0 flex items-center justify-end">
+            {settings.showPancasila && (
+              <div className="p-0.5 rounded-full bg-white shadow-2xs">
+                <img
+                  src={settings.pancasilaLogo}
+                  alt="Logo Pemerintah Aceh"
+                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                />
+              </div>
             )}
           </div>
         </div>
 
-        <div className="mt-2.5 flex items-center gap-1.5 text-[8.5px] font-extrabold text-slate-800 uppercase leading-none">
-          <Calendar className="w-3.2 h-3.2 text-[#0b3565] flex-shrink-0" />
-          <span className="truncate">{formatTtl()}</span>
+        {/* Decorative Green Gold Rule */}
+        <div className="w-full mt-1 flex items-center justify-center gap-1">
+          <div className="h-[1.5px] bg-gradient-to-r from-transparent via-emerald-300 to-transparent flex-1" />
+          <span className="text-[7px] text-emerald-300 font-bold">★ SERAMBI MEKKAH ★</span>
+          <div className="h-[1.5px] bg-gradient-to-r from-transparent via-emerald-300 to-transparent flex-1" />
         </div>
+      </div>
 
-        <div className="mt-2 flex items-start gap-1.5 leading-none">
-          <UserCheck className="w-3.2 h-3.2 text-[#0b3565] flex-shrink-0 mt-0.5" />
-          <div>
-            <span className="text-[6.5px] font-bold text-slate-600 block uppercase">
-              BERLAKU S/D
-            </span>
-            <span
-              className="text-[10px] font-extrabold block mt-0.5"
-              style={{ color: primaryCol }}
+      {/* Sub-header Bar: Title */}
+      <div className="w-full py-0.5 px-3 flex items-center justify-between bg-emerald-100 border-b border-emerald-300 text-emerald-950 font-black text-[8px] z-20">
+        <span className="uppercase tracking-widest flex items-center gap-1">
+          <Star className="w-2.5 h-2.5 text-emerald-700 fill-emerald-600" />
+          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+        </span>
+        <span className="font-mono text-emerald-900">NISN: {student.nisn}</span>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
+        {/* Photo with Emerald Frame */}
+        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+          <div className="relative p-1 rounded bg-emerald-800 border border-emerald-400 shadow-xs">
+            <div
+              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              style={{
+                borderRadius:
+                  settings.photoBorderRadius === 'circle'
+                    ? '50%'
+                    : settings.photoBorderRadius === 'square'
+                    ? '0px'
+                    : '4px',
+              }}
             >
-              {formatBerlaku()}
+              {student.foto ? (
+                <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-emerald-900 text-white p-1 text-center">
+                  <span className="text-[10px] font-bold">Pas Foto</span>
+                  <span className="text-[8px] opacity-80">3 x 4</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 inset-x-0 bg-emerald-950/90 py-0.5 text-[5.5px] font-black text-center text-emerald-200 uppercase tracking-widest">
+                ISLAMI & BERAKHLAK
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-1 text-center w-full bg-emerald-50 rounded border border-emerald-300 py-0.5 px-1 shadow-2xs">
+            <span className="text-[7.5px] font-mono font-extrabold text-emerald-950 leading-none block">
+              NIS: {student.nis || '-'}
             </span>
+          </div>
+        </div>
+
+        {/* Identity Table */}
+        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+          <table className="w-full text-[8.5px] leading-tight border-collapse">
+            <tbody>
+              <tr className="border-b border-emerald-200">
+                <td className="w-[74px] font-bold text-emerald-950 py-[3px] whitespace-nowrap text-[8px]">
+                  NIS / NISN
+                </td>
+                <td className="w-[8px] text-center text-emerald-700 font-bold">:</td>
+                <td className="font-mono font-extrabold text-slate-900 py-[3px]">
+                  {student.nis || '-'} / {student.nisn}
+                </td>
+              </tr>
+              <tr className="border-b border-emerald-200">
+                <td className="font-bold text-emerald-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Nama Lengkap
+                </td>
+                <td className="text-center text-emerald-700 font-bold">:</td>
+                <td className="font-black uppercase tracking-tight py-[3px] text-[9.5px] text-emerald-900 truncate max-w-[160px]">
+                  {student.nama}
+                </td>
+              </tr>
+              <tr className="border-b border-emerald-200">
+                <td className="font-bold text-emerald-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Tempat, Tgl Lahir
+                </td>
+                <td className="text-center text-emerald-700 font-bold">:</td>
+                <td className="font-bold text-slate-800 py-[3px] truncate max-w-[160px]">
+                  {formatTtl()}
+                </td>
+              </tr>
+              <tr className="border-b border-emerald-200">
+                <td className="font-bold text-emerald-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Jenis Kelamin
+                </td>
+                <td className="text-center text-emerald-700 font-bold">:</td>
+                <td className="font-semibold text-slate-800 py-[3px]">
+                  {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
+                </td>
+              </tr>
+              <tr className="border-b border-emerald-200">
+                <td className="font-bold text-emerald-950 py-[3px] whitespace-nowrap align-top text-[8px]">
+                  Alamat
+                </td>
+                <td className="text-center text-emerald-700 font-bold align-top">:</td>
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[160px]">
+                  {student.alamat || '-'}
+                </td>
+              </tr>
+              <tr>
+                <td className="font-bold text-emerald-950 py-[3px] whitespace-nowrap text-[8px]">
+                  Berlaku S/D
+                </td>
+                <td className="text-center text-emerald-700 font-bold">:</td>
+                <td className="font-black text-emerald-800 py-[3px]">
+                  {formatBerlaku()} <span className="font-normal text-[7px] text-slate-500">(Aktif)</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Right QR & Endorsement */}
+        <div className="w-[102px] flex flex-col items-center justify-between text-center flex-shrink-0 border-l border-emerald-200 pl-1.5 py-0.5">
+          {qrDataUrl && (
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="bg-white p-1 rounded border border-emerald-400 shadow-2xs flex flex-col items-center cursor-pointer hover:border-emerald-700 hover:ring-2 hover:ring-emerald-400/40 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Validasi"
+                className="w-[52px] h-[52px] object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5px] font-mono text-emerald-900 font-bold block mt-0.5 group-hover:underline">
+                ★ VERIFIKASI SAH ★
+              </span>
+            </div>
+          )}
+
+          <div className="w-full relative mt-0.5">
+            <p className="text-[6.5px] font-medium text-slate-600 leading-none">
+              {settings.kotaPenerbit || 'Julok'}, {settings.tanggalTerbit || '15 Juli 2024'}
+            </p>
+            <p className="text-[7px] font-extrabold text-slate-800 leading-tight">
+              {settings.kepalaSekolahJabatan || 'Kepala Sekolah'}
+            </p>
+            <div className="relative h-7 w-full flex items-center justify-center my-0.5">
+              {settings.showStempel && settings.stempelUrl && (
+                <img
+                  src={settings.stempelUrl}
+                  alt="Stempel Dinas"
+                  className="absolute -top-1.5 left-0.5 w-10 h-10 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-90 z-20"
+                />
+              )}
+              {settings.showTandaTangan && settings.tandaTanganUrl && (
+                <img
+                  src={settings.tandaTanganUrl}
+                  alt="TTD"
+                  className="w-18 h-7 object-contain relative z-10"
+                />
+              )}
+            </div>
+            <p className="text-[7.5px] font-black text-slate-900 underline underline-offset-1 leading-none truncate max-w-[100px] mx-auto">
+              {settings.kepalaSekolahNama || 'Irmi, S.Pd., M.Pd'}
+            </p>
+            <p className="text-[5.5px] font-mono text-slate-600 mt-0.5 leading-none">
+              NIP. {settings.kepalaSekolahNip || '1980102 200504 2 001'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Right Endorsement & QR */}
-      <div className="absolute right-4 bottom-2.5 z-20 flex flex-col items-end text-right">
-        {qrDataUrl && (
-          <div
-            onClick={handleQrClick}
-            title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
-            className="bg-white p-0.5 rounded shadow-2xs border border-slate-200 mb-1 cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/30 transition-all group"
-          >
-            <img
-              src={qrDataUrl}
-              alt="QR Code"
-              className="w-16 h-16 object-contain group-hover:scale-105 transition-transform"
-            />
-            <span className="text-[5px] font-mono text-blue-700 font-bold block text-center mt-0.5 group-hover:underline">
-              KLIK / SCAN
-            </span>
-          </div>
-        )}
-
-        <div className="relative pr-0.5 text-right leading-none">
-          <p className="text-[6.5px] font-semibold text-slate-700">
-            {settings.kepalaSekolahJabatan}
-          </p>
-
-          <div className="relative h-7 w-26 my-0.5 ml-auto flex items-center justify-end">
-            {settings.showStempel && settings.stempelUrl && (
-              <img
-                src={settings.stempelUrl}
-                alt="Stempel"
-                className="absolute -top-1.5 right-6 w-11 h-11 object-contain pointer-events-none -rotate-12 mix-blend-multiply opacity-90 z-20"
-              />
-            )}
-            {settings.showTandaTangan && settings.tandaTanganUrl && (
-              <img
-                src={settings.tandaTanganUrl}
-                alt="TTD"
-                className="w-20 h-7 object-contain relative z-10"
-              />
-            )}
-          </div>
-
-          <p className="text-[7.5px] font-bold text-slate-900 underline underline-offset-1">
-            {settings.kepalaSekolahNama}
-          </p>
-          <p className="text-[6px] font-mono text-slate-600 mt-0.5">
-            NIP: {settings.kepalaSekolahNip}
-          </p>
-        </div>
+      {/* Bottom Islamic Emerald Banner */}
+      <div className="w-full py-1 px-3 flex items-center justify-between text-emerald-200 text-[6.5px] font-bold z-20 tracking-wider bg-emerald-950">
+        <span>SERAMBI MEKKAH • DINAS PENDIDIKAN PROVINSI ACEH</span>
+        <span className="font-mono text-emerald-300">CR80 RESMI</span>
       </div>
     </div>
   );
@@ -879,42 +1457,61 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   // Render template dispatcher
   const renderFrontSide = () => {
     switch (settings.templateStyle) {
-      case 'smart_card':
-        return renderSmartCard();
-      case 'classic_kop':
-        return renderClassicKop();
-      case 'canva_modern':
-        return renderCanvaModern();
+      case 'garuda_emas':
+        return renderGarudaEmas();
+      case 'cyber_smart_id':
+        return renderCyberSmartId();
+      case 'batik_nusantara':
+        return renderBatikNusantara();
+      case 'minimalis_modern':
+        return renderMinimalisModern();
+      case 'kartu_hijau_islami':
+        return renderKartuHijauIslami();
       case 'resmi_kedinasan':
       default:
         return renderResmiKedinasan();
     }
   };
 
+  // Calculate effective scale based on container width or passed scale
+  let effectiveScale = scale ?? 1;
+  if (autoFit && containerWidth > 0) {
+    // Leave safe padding for shadows
+    const safeWidth = Math.max(220, containerWidth - 8);
+    const fitScale = safeWidth / widthPx;
+    effectiveScale = Math.min(1.15, fitScale);
+  }
+
+  const cardPixelWidth = Math.round(widthPx * effectiveScale);
+  const cardPixelHeight = Math.round(heightPx * effectiveScale);
+
   return (
     <div
-      className={`student-card-root relative select-none overflow-hidden print:shadow-none print:m-0 ${
-        showShadow ? 'shadow-xl hover:shadow-2xl transition-shadow' : ''
-      } ${className}`}
-      style={{
-        width: `${widthPx * scale}px`,
-        height: `${heightPx * scale}px`,
-        minWidth: `${widthPx * scale}px`,
-        minHeight: `${heightPx * scale}px`,
-        backgroundColor: '#ffffff',
-        borderRadius: `${14 * scale}px`,
-      }}
+      ref={wrapperRef}
+      className={`student-card-wrapper w-full flex items-center justify-center ${className}`}
     >
       <div
-        className="w-full h-full relative overflow-hidden flex flex-col justify-between bg-white"
+        className={`student-card-root relative select-none overflow-hidden print:shadow-none print:m-0 transition-all ${
+          showShadow ? 'shadow-xl hover:shadow-2xl' : ''
+        }`}
         style={{
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          width: `${widthPx}px`,
-          height: `${heightPx}px`,
-          fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+          width: `${cardPixelWidth}px`,
+          height: `${cardPixelHeight}px`,
+          maxWidth: '100%',
+          backgroundColor: '#ffffff',
+          borderRadius: `${Math.round(14 * effectiveScale)}px`,
         }}
       >
+        <div
+          className="w-full h-full relative overflow-hidden flex flex-col justify-between bg-white"
+          style={{
+            transform: `scale(${effectiveScale})`,
+            transformOrigin: 'top left',
+            width: `${widthPx}px`,
+            height: `${heightPx}px`,
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+          }}
+        >
         {/* Subtle Center School Emblem Watermark */}
         {settings.showWatermark && (
           <div
@@ -1046,5 +1643,6 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         )}
       </div>
     </div>
+  </div>
   );
 };

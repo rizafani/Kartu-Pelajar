@@ -52,104 +52,23 @@ export async function downloadCardAsPng(
       }
     }
 
-    if (settings.templateStyle === 'canva_modern') {
-      // ==========================================
-      // CANVA MODERN (CURVED WAVE DESIGN)
-      // ==========================================
-      // Left: Logo Sekolah
-      if (settings.schoolLogo) {
-        const logoImg = await loadImage(settings.schoolLogo);
-        if (logoImg) ctx.drawImage(logoImg, 35, 20, 100, 110);
-      }
-      // Right: Logo Pemerintah Aceh
-      if (settings.showPancasila && settings.pancasilaLogo) {
-        const pImg = await loadImage(settings.pancasilaLogo);
-        if (pImg) ctx.drawImage(pImg, width - 130, 20, 85, 110);
-      }
+    // Resolve theme banner colors based on active template
+    let bannerColor = primaryNavy;
+    let nisnColor = accentGold;
 
-      ctx.textAlign = 'center';
-      ctx.fillStyle = primaryNavy;
-      ctx.font = '900 36px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(settings.cardTitle || 'KARTU PELAJAR', width / 2 + 30, 52);
-
-      ctx.font = '800 27px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(settings.schoolName || 'SMA NEGERI 1 JULOK', width / 2 + 30, 85);
-
-      ctx.fillStyle = '#334155';
-      ctx.font = '600 15px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur`, width / 2 + 30, 112);
-      ctx.fillText(`NPSN (${settings.npsn || '10101877'})`, width / 2 + 30, 134);
-
-      ctx.fillStyle = '#64748b';
-      ctx.font = '500 14px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`${settings.website}  |  ${settings.email}`, width / 2 + 30, 156);
-
-      // Left Curve
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(0, 240);
-      ctx.bezierCurveTo(120, 240, 220, 310, 270, 420);
-      ctx.bezierCurveTo(310, 510, 390, 638, 480, 638);
-      ctx.lineTo(0, 638);
-      ctx.closePath();
-      ctx.fillStyle = primaryNavy;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.moveTo(0, 235);
-      ctx.bezierCurveTo(120, 235, 220, 305, 270, 415);
-      ctx.bezierCurveTo(310, 505, 390, 633, 480, 633);
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 9;
-      ctx.stroke();
-      ctx.restore();
-
-      // Student Photo
-      const photoX = 65;
-      const photoY = 175;
-      const photoW = 205;
-      const photoH = 265;
-      const radius = 28;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(photoX, photoY, photoW, photoH, radius);
-      ctx.clip();
-      ctx.fillStyle = '#0284c7';
-      ctx.fillRect(photoX, photoY, photoW, photoH);
-      const studentPhoto = await loadImage(student.foto || '');
-      if (studentPhoto) ctx.drawImage(studentPhoto, photoX, photoY, photoW, photoH);
-      ctx.restore();
-
-      // Info Block
-      const infoX = 305;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = primaryNavy;
-      ctx.fillRect(infoX, 260, 6, 72);
-
-      ctx.font = '900 28px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(student.nama.toUpperCase(), infoX + 22, 290);
-
-      ctx.font = 'bold 22px monospace';
-      const idLine = student.nis ? `${student.nisn}  (NIS: ${student.nis})` : student.nisn;
-      ctx.fillText(idLine, infoX + 22, 324);
-
-      ctx.fillStyle = '#0f172a';
-      ctx.font = '900 17px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`📅  ${student.tempatLahir.toUpperCase()}, ${student.tanggalLahir}`, infoX + 22, 385);
-
-      ctx.fillStyle = '#475569';
-      ctx.font = 'bold 15px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`👤  BERLAKU S/D`, infoX + 22, 430);
-
-      ctx.fillStyle = primaryNavy;
-      ctx.font = '900 22px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(student.masaBerlaku || '06/2028', infoX + 50, 460);
-    } else {
-      // ==========================================
-      // RESMI KEDINASAN / SMART CARD / KLASIK KOP
-      // (FLAGSHIP OFFICIAL INDONESIAN TEMPLATE)
-      // ==========================================
+    if (settings.templateStyle === 'garuda_emas') {
+      bannerColor = '#b45309';
+      nisnColor = '#fde047';
+    } else if (settings.templateStyle === 'batik_nusantara') {
+      bannerColor = '#7f1d1d';
+      nisnColor = '#fde047';
+    } else if (settings.templateStyle === 'kartu_hijau_islami') {
+      bannerColor = '#064e3b';
+      nisnColor = '#a7f3d0';
+    } else if (settings.templateStyle === 'cyber_smart_id') {
+      bannerColor = '#0f172a';
+      nisnColor = '#38bdf8';
+    }
 
       // 1. Kop Surat Kedinasan: Kiri Logo Sekolah, Kanan Logo Pemerintah Aceh
       if (settings.schoolLogo) {
@@ -188,7 +107,7 @@ export async function downloadCardAsPng(
       ctx.fillRect(35, 124, width - 70, 2);
 
       // 2. Card Title Banner
-      ctx.fillStyle = primaryNavy;
+      ctx.fillStyle = bannerColor;
       ctx.fillRect(0, 134, width, 36);
 
       ctx.fillStyle = '#ffffff';
@@ -196,7 +115,7 @@ export async function downloadCardAsPng(
       ctx.textAlign = 'left';
       ctx.fillText(settings.cardTitle || 'KARTU TANDA PELAJAR', 45, 159);
 
-      ctx.fillStyle = accentGold;
+      ctx.fillStyle = nisnColor;
       ctx.font = 'bold 16px monospace';
       ctx.textAlign = 'right';
       ctx.fillText(`NISN: ${student.nisn}`, width - 45, 159);
@@ -285,7 +204,6 @@ export async function downloadCardAsPng(
       ctx.textAlign = 'right';
       ctx.font = 'bold 14px monospace';
       ctx.fillText('CR80 ISO-7810 / RESMI', width - 45, height - 13);
-    }
 
     // Common Front Right: QR Code & Endorsement
     const qrString = getQrStringForStudent(student, settings);
