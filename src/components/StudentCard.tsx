@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { CardSettings, Student } from '../types';
-import { generateBarcodeSvg, generateQrDataUrl, getQrStringForStudent } from '../utils/barcodeGenerator';
+import {
+  generateBarcodeSvg,
+  generateQrDataUrl,
+  getQrStringForStudent,
+  buildStudentVerificationUrl,
+} from '../utils/barcodeGenerator';
 import { MapPin, Globe, Mail, Calendar, UserCheck, ShieldCheck, Wifi } from 'lucide-react';
 import { GOLD_EMV_CHIP_SVG, SECURITY_GUILLOCHE_SVG } from '../data/defaults';
 
@@ -11,6 +16,7 @@ interface StudentCardProps {
   scale?: number;
   className?: string;
   showShadow?: boolean;
+  onOpenVerification?: (student: Student) => void;
 }
 
 export const StudentCard: React.FC<StudentCardProps> = ({
@@ -20,9 +26,20 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   scale = 1,
   className = '',
   showShadow = true,
+  onOpenVerification,
 }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const isLandscape = settings.orientation === 'landscape';
+
+  const handleQrClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onOpenVerification) {
+      onOpenVerification(student);
+    } else {
+      const url = buildStudentVerificationUrl(student, settings);
+      window.open(url, '_blank');
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -80,22 +97,13 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* 1. KOP SURAT KEDINASAN RESMI (Full width, balanced logos, no dead space) */}
       <div className="w-full pt-2 px-3 pb-1 bg-white/95 z-20 flex flex-col">
         <div className="flex items-center justify-between gap-2">
-          {/* Logo Kiri: Lambang Pemda / Pancasila / Tut Wuri */}
+          {/* Logo Kiri: Logo Sekolah (SMA Negeri 1 Julok) */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {settings.showPancasila && (
-              <img
-                src={settings.pancasilaLogo}
-                alt="Lambang Negara"
-                className="h-9 w-9 object-contain drop-shadow-2xs"
-              />
-            )}
-            {settings.showMerdekaBelajar && (
-              <img
-                src={settings.merdekaBelajarLogo}
-                alt="Merdeka Belajar"
-                className="h-7 w-auto object-contain"
-              />
-            )}
+            <img
+              src={settings.schoolLogo}
+              alt="Logo Sekolah"
+              className="h-10.5 w-10.5 object-contain drop-shadow-2xs"
+            />
           </div>
 
           {/* Kop Teks Dinas Resmi - Compact & Strong Presence */}
@@ -117,13 +125,15 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             </p>
           </div>
 
-          {/* Logo Kanan: Lambang Sekolah */}
-          <div className="flex-shrink-0">
-            <img
-              src={settings.schoolLogo}
-              alt="Logo Sekolah"
-              className="h-10 w-10 object-contain drop-shadow-2xs"
-            />
+          {/* Logo Kanan: Logo Pemerintah Aceh */}
+          <div className="flex-shrink-0 flex items-center justify-end">
+            {settings.showPancasila && (
+              <img
+                src={settings.pancasilaLogo}
+                alt="Logo Pemerintah Aceh"
+                className="h-10.5 w-auto max-w-[44px] object-contain drop-shadow-2xs"
+              />
+            )}
           </div>
         </div>
 
@@ -203,70 +213,60 @@ export const StudentCard: React.FC<StudentCardProps> = ({
           <table className="w-full text-[8.5px] leading-tight border-collapse">
             <tbody>
               <tr className="border-b border-slate-100">
-                <td className="w-[74px] font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
+                <td className="w-[74px] font-bold text-slate-600 py-[3px] whitespace-nowrap text-[8px]">
                   NIS / NISN
                 </td>
                 <td className="w-[8px] text-center text-slate-400 font-bold">:</td>
-                <td className="font-mono font-extrabold text-slate-900 py-[2px]">
+                <td className="font-mono font-extrabold text-slate-900 py-[3px]">
                   {student.nis || '-'} / {student.nisn}
                 </td>
               </tr>
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
+                <td className="font-bold text-slate-600 py-[3px] whitespace-nowrap text-[8px]">
                   Nama Lengkap
                 </td>
                 <td className="text-center text-slate-400 font-bold">:</td>
                 <td
-                  className="font-black uppercase tracking-tight py-[2px] text-[9.5px] truncate max-w-[160px]"
+                  className="font-black uppercase tracking-tight py-[3px] text-[9.5px] truncate max-w-[160px]"
                   style={{ color: primaryCol }}
                 >
                   {student.nama}
                 </td>
               </tr>
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
+                <td className="font-bold text-slate-600 py-[3px] whitespace-nowrap text-[8px]">
                   Tempat, Tgl Lahir
                 </td>
                 <td className="text-center text-slate-400 font-bold">:</td>
-                <td className="font-bold text-slate-800 py-[2px] truncate max-w-[160px]">
+                <td className="font-bold text-slate-800 py-[3px] truncate max-w-[160px]">
                   {formatTtl()}
                 </td>
               </tr>
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
+                <td className="font-bold text-slate-600 py-[3px] whitespace-nowrap text-[8px]">
                   Jenis Kelamin
                 </td>
                 <td className="text-center text-slate-400 font-bold">:</td>
-                <td className="font-semibold text-slate-800 py-[2px]">
+                <td className="font-semibold text-slate-800 py-[3px]">
                   {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
                 </td>
               </tr>
+
               <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
-                  Kelas / Fase
-                </td>
-                <td className="text-center text-slate-400 font-bold">:</td>
-                <td className="font-bold text-slate-900 py-[2px]">
-                  <span className="px-1 py-0.2 rounded bg-slate-100 border border-slate-200">
-                    {student.kelas} {student.jurusan ? `• ${student.jurusan}` : ''}
-                  </span>
-                </td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap align-top text-[8px]">
+                <td className="font-bold text-slate-600 py-[3px] whitespace-nowrap align-top text-[8px]">
                   Alamat
                 </td>
                 <td className="text-center text-slate-400 font-bold align-top">:</td>
-                <td className="font-medium text-slate-700 py-[2px] leading-tight line-clamp-2 max-w-[160px]">
+                <td className="font-medium text-slate-700 py-[3px] leading-tight line-clamp-2 max-w-[160px]">
                   {student.alamat || '-'}
                 </td>
               </tr>
               <tr>
-                <td className="font-bold text-slate-600 py-[2px] whitespace-nowrap text-[8px]">
+                <td className="font-bold text-slate-600 py-[3px] whitespace-nowrap text-[8px]">
                   Berlaku S/D
                 </td>
                 <td className="text-center text-slate-400 font-bold">:</td>
-                <td className="font-black text-emerald-800 py-[2px]">
+                <td className="font-black text-emerald-800 py-[3px]">
                   {formatBerlaku()} <span className="font-normal text-[7px] text-slate-500">(Aktif)</span>
                 </td>
               </tr>
@@ -276,12 +276,20 @@ export const StudentCard: React.FC<StudentCardProps> = ({
 
         {/* Kolom Kanan: QR Code Proporsional & Pengesahan Kepala Sekolah */}
         <div className="w-[102px] flex flex-col items-center justify-between text-center flex-shrink-0 border-l border-slate-200/90 pl-1.5 py-0.5">
-          {/* QR Code dengan Frame Rapi */}
+          {/* QR Code dengan Frame Rapi - Tautan Verifikasi Keaslian */}
           {qrDataUrl && (
-            <div className="bg-white p-1 rounded border border-slate-300 shadow-2xs flex flex-col items-center">
-              <img src={qrDataUrl} alt="QR Validasi" className="w-[54px] h-[54px] object-contain" />
-              <span className="text-[5.5px] font-mono text-slate-500 font-bold block mt-0.5 tracking-tight">
-                SCAN VALIDASI
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="bg-white p-1 rounded border border-slate-300 shadow-2xs flex flex-col items-center cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/30 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Validasi"
+                className="w-[54px] h-[54px] object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5.5px] font-mono text-blue-700 font-extrabold block mt-0.5 tracking-tight group-hover:underline">
+                KLIK / SCAN VALIDASI
               </span>
             </div>
           )}
@@ -446,13 +454,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                   {student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)'}
                 </td>
               </tr>
-              <tr className="border-b border-slate-100">
-                <td className="font-bold text-slate-500 py-1">Kelas / Fase</td>
-                <td className="font-bold text-slate-400">:</td>
-                <td className="font-bold text-slate-800 py-1">
-                  {student.kelas} {student.jurusan ? `(${student.jurusan})` : ''}
-                </td>
-              </tr>
+
               <tr className="border-b border-slate-100">
                 <td className="font-bold text-slate-500 py-1">Alamat</td>
                 <td className="font-bold text-slate-400">:</td>
@@ -472,10 +474,18 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         {/* Right: QR Code & Validation */}
         <div className="w-[96px] flex flex-col items-center justify-between flex-shrink-0 text-center pl-1.5 border-l border-slate-200 py-0.5">
           {qrDataUrl && (
-            <div className="p-1 bg-white rounded border border-slate-200 shadow-2xs">
-              <img src={qrDataUrl} alt="QR Code" className="w-13 h-13 object-contain" />
-              <span className="text-[5.5px] font-mono text-slate-500 font-bold block mt-0.5">
-                VERIFIED ID
+            <div
+              onClick={handleQrClick}
+              title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+              className="p-1 bg-white rounded border border-slate-200 shadow-2xs cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/30 transition-all group"
+            >
+              <img
+                src={qrDataUrl}
+                alt="QR Code"
+                className="w-13 h-13 object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-[5.5px] font-mono text-blue-700 font-extrabold block mt-0.5 group-hover:underline">
+                KLIK / SCAN ID
               </span>
             </div>
           )}
@@ -532,9 +542,9 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Traditional Formal Kop */}
       <div className="w-full pb-1 border-b-[2px] border-black z-20 flex items-center justify-between">
         <img
-          src={settings.pancasilaLogo || settings.schoolLogo}
-          alt="Logo"
-          className="h-9 w-9 object-contain"
+          src={settings.schoolLogo}
+          alt="Logo Sekolah"
+          className="h-10 w-10 object-contain"
         />
         <div className="text-center px-1 flex-1">
           <p className="text-[7.5px] font-extrabold uppercase tracking-wider text-slate-800">
@@ -550,7 +560,11 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             {settings.schoolAddress} • NPSN: {settings.npsn}
           </p>
         </div>
-        <img src={settings.schoolLogo} alt="Logo" className="h-9 w-9 object-contain" />
+        <img
+          src={settings.pancasilaLogo}
+          alt="Logo Pemerintah Aceh"
+          className="h-10 w-auto max-w-[40px] object-contain"
+        />
       </div>
 
       {/* Title */}
@@ -590,11 +604,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({
               <td>:</td>
               <td className="font-bold">{formatTtl()}</td>
             </tr>
-            <tr className="border-b border-slate-200">
-              <td className="font-bold py-1">Kelas</td>
-              <td>:</td>
-              <td>{student.kelas}</td>
-            </tr>
+
             <tr className="border-b border-slate-200">
               <td className="font-bold py-1">Alamat</td>
               <td>:</td>
@@ -646,21 +656,13 @@ export const StudentCard: React.FC<StudentCardProps> = ({
     <div className="relative w-full h-full text-slate-800 z-10 overflow-hidden flex flex-col justify-between">
       {/* 1. TOP LOGO HEADER ROW */}
       <div className="w-full pt-2.5 px-4 flex items-start justify-between z-20">
+        {/* Logo Kiri: Logo Sekolah */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {settings.showPancasila && (
-            <img
-              src={settings.pancasilaLogo}
-              alt="Pancasila"
-              className="h-8 object-contain drop-shadow-2xs"
-            />
-          )}
-          {settings.showMerdekaBelajar && (
-            <img
-              src={settings.merdekaBelajarLogo}
-              alt="Merdeka Belajar"
-              className="h-7 object-contain"
-            />
-          )}
+          <img
+            src={settings.schoolLogo}
+            alt="Logo Sekolah"
+            className="w-11 h-12 object-contain drop-shadow-xs"
+          />
         </div>
 
         <div className="flex-1 px-2 text-center flex flex-col items-center">
@@ -703,12 +705,15 @@ export const StudentCard: React.FC<StudentCardProps> = ({
           </div>
         </div>
 
+        {/* Logo Kanan: Logo Pemerintah Aceh */}
         <div className="relative flex flex-col items-center flex-shrink-0">
-          <img
-            src={settings.schoolLogo}
-            alt="Logo"
-            className="w-11 h-13 object-contain drop-shadow-xs"
-          />
+          {settings.showPancasila && (
+            <img
+              src={settings.pancasilaLogo}
+              alt="Logo Pemerintah Aceh"
+              className="w-10 h-12 object-contain drop-shadow-xs"
+            />
+          )}
         </div>
       </div>
 
@@ -822,8 +827,19 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Right Endorsement & QR */}
       <div className="absolute right-4 bottom-2.5 z-20 flex flex-col items-end text-right">
         {qrDataUrl && (
-          <div className="bg-white p-0.5 rounded shadow-2xs border border-slate-200 mb-1">
-            <img src={qrDataUrl} alt="QR Code" className="w-16 h-16 object-contain" />
+          <div
+            onClick={handleQrClick}
+            title="Klik untuk membuka tautan verifikasi keaslian kartu pelajar"
+            className="bg-white p-0.5 rounded shadow-2xs border border-slate-200 mb-1 cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/30 transition-all group"
+          >
+            <img
+              src={qrDataUrl}
+              alt="QR Code"
+              className="w-16 h-16 object-contain group-hover:scale-105 transition-transform"
+            />
+            <span className="text-[5px] font-mono text-blue-700 font-bold block text-center mt-0.5 group-hover:underline">
+              KLIK / SCAN
+            </span>
           </div>
         )}
 
@@ -967,12 +983,48 @@ export const StudentCard: React.FC<StudentCardProps> = ({
                   </p>
                 </div>
 
-                <div
-                  className="p-1 bg-white rounded border border-slate-300 shadow-2xs w-full max-w-[270px] flex items-center justify-center"
-                  dangerouslySetInnerHTML={{
-                    __html: generateBarcodeSvg(student.nisn, 260, 30),
-                  }}
-                />
+                <div className="w-full max-w-[280px] bg-slate-50 border border-slate-300 rounded-lg p-1.5 shadow-2xs flex items-center justify-between gap-2">
+                  {/* Barcode Garis 1D */}
+                  <div
+                    onClick={handleQrClick}
+                    title="Klik atau scan untuk membuka tautan verifikasi keaslian kartu"
+                    className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:opacity-90"
+                  >
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: generateBarcodeSvg(student.nisn, 195, 28),
+                      }}
+                    />
+                    <span className="text-[5.5px] font-mono font-bold text-slate-700 block mt-0.5">
+                      NISN: {student.nisn}
+                    </span>
+                  </div>
+
+                  {/* QR Link Aktif */}
+                  {qrDataUrl && (
+                    <div
+                      onClick={handleQrClick}
+                      title="Scan dengan kamera HP untuk verifikasi keaslian digital"
+                      className="p-1 bg-white rounded border border-slate-300 shadow-2xs flex flex-col items-center cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-400/40 transition-all flex-shrink-0 group"
+                    >
+                      <img
+                        src={qrDataUrl}
+                        alt="QR Link"
+                        className="w-[38px] h-[38px] object-contain group-hover:scale-105 transition-transform"
+                      />
+                      <span className="text-[4.5px] font-mono text-blue-700 font-extrabold block mt-0.5 group-hover:underline">
+                        SCAN LINK
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <span
+                  onClick={handleQrClick}
+                  className="text-[5.5px] font-mono text-blue-700 font-extrabold block text-center mt-0.5 cursor-pointer hover:underline"
+                >
+                  ● SCAN BARCODE / QR CODE DENGAN KAMERA HP UNTUK VERIFIKASI KEASLIAN
+                </span>
 
                 <p className="text-[6.5px] text-slate-600 font-semibold text-center mt-0.5">
                   {settings.backFooterNote || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'}

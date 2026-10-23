@@ -156,6 +156,9 @@ export const SECURITY_GUILLOCHE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http:
   <rect width="100%" height="100%" fill="url(%23guilloche)"/>
 </svg>`;
 
+export const ACEH_GOV_LOGO_PATH = '/assets/aistudio/aceh__1__ef9f2bb4.png';
+export const SMAN1_JULOK_LOGO_PATH = '/assets/aistudio/LOGO_SEKOLAH__3__d8213636.png';
+
 export const THEME_PRESETS: Record<CardThemePreset, Partial<CardSettings>> = {
   royal_navy: {
     themePreset: 'royal_navy',
@@ -228,11 +231,11 @@ export const DEFAULT_CARD_SETTINGS: CardSettings = {
   cardBgColor: '#ffffff',
   textColor: '#0f2952',
   
-  // Logos
-  schoolLogo: SMAN1_JULOK_LOGO_SVG,
+  // Logos: Kiri Logo Sekolah, Kanan Logo Pemerintah Aceh
+  schoolLogo: SMAN1_JULOK_LOGO_PATH,
   kemdikbudLogo: TUT_WURI_SVG,
   merdekaBelajarLogo: MERDEKA_BELAJAR_SVG,
-  pancasilaLogo: PANCASILA_BADGE_SVG,
+  pancasilaLogo: ACEH_GOV_LOGO_PATH,
   showMerdekaBelajar: true,
   showPancasila: true,
   showSecondaryLogo: true,
@@ -259,7 +262,7 @@ export const DEFAULT_CARD_SETTINGS: CardSettings = {
   
   // Codes
   barcodeType: 'both',
-  qrContent: 'nisn',
+  qrContent: 'url',
   
   // Back card
   backTitle: 'TATA TERTIB & KETENTUAN KARTU PELAJAR',

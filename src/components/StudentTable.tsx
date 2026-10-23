@@ -17,6 +17,7 @@ import {
   UserX,
   X,
   Save,
+  ShieldCheck,
 } from 'lucide-react';
 import { Student } from '../types';
 import { StudentPhotoChoiceModal } from './StudentPhotoChoiceModal';
@@ -34,6 +35,7 @@ interface StudentTableProps {
   onOpenWebcamForStudent: (student: Student) => void;
   onOpenZipModal: () => void;
   onTriggerPrint: (mode?: 'selected' | 'all') => void;
+  onOpenVerification?: (student: Student) => void;
 }
 
 export const StudentTable: React.FC<StudentTableProps> = ({
@@ -49,6 +51,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   onOpenWebcamForStudent,
   onOpenZipModal,
   onTriggerPrint,
+  onOpenVerification,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [classFilter, setClassFilter] = useState('all');
@@ -465,6 +468,15 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {onOpenVerification && (
+                          <button
+                            onClick={() => onOpenVerification(std)}
+                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Buka Link Verifikasi Keaslian (Scan Preview)"
+                          >
+                            <ShieldCheck className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenEdit(std)}
                           className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"

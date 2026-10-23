@@ -56,17 +56,15 @@ export async function downloadCardAsPng(
       // ==========================================
       // CANVA MODERN (CURVED WAVE DESIGN)
       // ==========================================
-      if (settings.showPancasila && settings.pancasilaLogo) {
-        const pImg = await loadImage(settings.pancasilaLogo);
-        if (pImg) ctx.drawImage(pImg, 35, 25, 60, 70);
-      }
-      if (settings.showMerdekaBelajar && settings.merdekaBelajarLogo) {
-        const mbImg = await loadImage(settings.merdekaBelajarLogo);
-        if (mbImg) ctx.drawImage(mbImg, 105, 30, 160, 60);
-      }
+      // Left: Logo Sekolah
       if (settings.schoolLogo) {
         const logoImg = await loadImage(settings.schoolLogo);
-        if (logoImg) ctx.drawImage(logoImg, width - 145, 20, 110, 128);
+        if (logoImg) ctx.drawImage(logoImg, 35, 20, 100, 110);
+      }
+      // Right: Logo Pemerintah Aceh
+      if (settings.showPancasila && settings.pancasilaLogo) {
+        const pImg = await loadImage(settings.pancasilaLogo);
+        if (pImg) ctx.drawImage(pImg, width - 130, 20, 85, 110);
       }
 
       ctx.textAlign = 'center';
@@ -153,18 +151,14 @@ export async function downloadCardAsPng(
       // (FLAGSHIP OFFICIAL INDONESIAN TEMPLATE)
       // ==========================================
 
-      // 1. Kop Surat Kedinasan
-      if (settings.showPancasila && settings.pancasilaLogo) {
-        const pImg = await loadImage(settings.pancasilaLogo);
-        if (pImg) ctx.drawImage(pImg, 40, 18, 72, 82);
-      }
-      if (settings.showMerdekaBelajar && settings.merdekaBelajarLogo) {
-        const mbImg = await loadImage(settings.merdekaBelajarLogo);
-        if (mbImg) ctx.drawImage(mbImg, 125, 32, 115, 48);
-      }
+      // 1. Kop Surat Kedinasan: Kiri Logo Sekolah, Kanan Logo Pemerintah Aceh
       if (settings.schoolLogo) {
         const sLogo = await loadImage(settings.schoolLogo);
-        if (sLogo) ctx.drawImage(sLogo, width - 130, 16, 90, 98);
+        if (sLogo) ctx.drawImage(sLogo, 40, 16, 92, 92);
+      }
+      if (settings.showPancasila && settings.pancasilaLogo) {
+        const pImg = await loadImage(settings.pancasilaLogo);
+        if (pImg) ctx.drawImage(pImg, width - 120, 16, 76, 92);
       }
 
       // Center Official Kop Text
@@ -256,12 +250,11 @@ export async function downloadCardAsPng(
         { label: 'Nama Lengkap', val: student.nama.toUpperCase(), bold: true, color: primaryNavy, size: '22px' },
         { label: 'Tempat, Tgl Lahir', val: `${(student.tempatLahir || '').toUpperCase()}, ${student.tanggalLahir}` },
         { label: 'Jenis Kelamin', val: student.jenisKelamin === 'L' ? 'Laki-laki (L)' : 'Perempuan (P)' },
-        { label: 'Kelas / Jurusan', val: `${student.kelas} ${student.jurusan ? `• ${student.jurusan}` : ''}` },
         { label: 'Alamat', val: student.alamat || '-' },
         { label: 'Berlaku S/D', val: `${student.masaBerlaku || '06/2028'} (Selama Siswa Aktif)`, bold: true, color: '#166534' },
       ];
 
-      let rowY = 210;
+      let rowY = 220;
       rows.forEach((r) => {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#475569';
@@ -393,12 +386,23 @@ export async function downloadCardAsPng(
       ruleY + 31
     );
 
-    // Barcode
-    const barcodeSvgStr = generateBarcodeSvg(student.nisn, 480, 75);
+    // Barcode & Active QR Verification Link
+    const barcodeSvgStr = generateBarcodeSvg(student.nisn, 480, 80);
     const barcodeDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(barcodeSvgStr)}`;
     const barcodeImg = await loadImage(barcodeDataUrl);
     if (barcodeImg) {
-      ctx.drawImage(barcodeImg, width / 2 - 240, height - 165, 480, 75);
+      ctx.drawImage(barcodeImg, 60, height - 170, 480, 80);
+    }
+
+    const backQrString = getQrStringForStudent(student, settings);
+    const backQrUrl = await generateQrDataUrl(backQrString, primaryNavy);
+    const backQrImg = await loadImage(backQrUrl);
+    if (backQrImg) {
+      ctx.drawImage(backQrImg, width - 200, height - 175, 125, 125);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 12px monospace';
+      ctx.fillStyle = '#0284c7';
+      ctx.fillText('SCAN LINK', width - 138, height - 42);
     }
 
     // Footnote

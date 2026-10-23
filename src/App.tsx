@@ -27,7 +27,13 @@ import {
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { CardSettings, PrintSettings, Student } from './types';
-import { DEFAULT_CARD_SETTINGS, DEFAULT_PRINT_SETTINGS, INITIAL_STUDENTS } from './data/defaults';
+import {
+  DEFAULT_CARD_SETTINGS,
+  DEFAULT_PRINT_SETTINGS,
+  INITIAL_STUDENTS,
+  SMAN1_JULOK_LOGO_PATH,
+  ACEH_GOV_LOGO_PATH,
+} from './data/defaults';
 import { CardStudio } from './components/CardStudio';
 import { StudentTable } from './components/StudentTable';
 import { ImportExportModal } from './components/ImportExportModal';
@@ -35,7 +41,9 @@ import { ZipPhotoModal } from './components/ZipPhotoModal';
 import { BatchPrintView } from './components/BatchPrintView';
 import { SingleCardModal } from './components/SingleCardModal';
 import { WebcamModal } from './components/WebcamModal';
+import { CardVerificationView } from './components/CardVerificationView';
 import { downloadCardAsPng } from './utils/cardExporter';
+import { decodeVerificationPayload } from './utils/barcodeGenerator';
 import {
   auth,
   db,
@@ -86,7 +94,15 @@ export default function App() {
         if (!parsed.templateStyle || parsed.templateStyle === 'canva_modern') {
           parsed.templateStyle = 'resmi_kedinasan';
         }
-        return { ...DEFAULT_CARD_SETTINGS, ...parsed };
+        // Ensure new uploaded Aceh Government and School logos are used
+        if (!parsed.schoolLogo || parsed.schoolLogo.startsWith('data:image/svg')) {
+          parsed.schoolLogo = SMAN1_JULOK_LOGO_PATH;
+        }
+        if (!parsed.pancasilaLogo || parsed.pancasilaLogo.startsWith('data:image/svg')) {
+          parsed.pancasilaLogo = ACEH_GOV_LOGO_PATH;
+        }
+        parsed.qrContent = 'url';
+        return { ...DEFAULT_CARD_SETTINGS, ...parsed, qrContent: 'url' };
       }
     } catch (e) {
       console.error('Failed reading card settings from storage', e);
@@ -118,6 +134,31 @@ export default function App() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Active QR verification lookup state from URL (?verify=nisn)
+  const [verificationNisn, setVerificationNisn] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('verify');
+    }
+    return null;
+  });
+
+  // Listen to popstate when browser back/forward buttons are pressed
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setVerificationNisn(params.get('verify'));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleOpenVerification = (student: Student) => {
+    setVerificationNisn(student.nisn);
+    const newUrl = `${window.location.pathname}?verify=${encodeURIComponent(student.nisn)}`;
+    window.history.pushState({}, '', newUrl);
   };
 
   // Test connection on initial app boot
@@ -387,6 +428,71 @@ export default function App() {
       ? students.filter((s) => selectedStudentIds.includes(s.id))
       : students;
 
+  // Resolve student for verification view
+  const verifiedStudentFromUrl = React.useMemo(() => {
+    if (typeof window === 'undefined' || !verificationNisn) return null;
+    const params = new URLSearchParams(window.location.search);
+    const namaParam = params.get('nama');
+    if (namaParam) {
+      return {
+        id: `verif-${verificationNisn}`,
+        nisn: verificationNisn,
+        nis: params.get('nis') || '',
+        nama: namaParam,
+        kelas: params.get('kelas') || 'X-1',
+        jurusan: params.get('jurusan') || 'Fase E (Umum)',
+        tempatLahir: params.get('tl') || 'BUKET SEURAJA',
+        tanggalLahir: params.get('tgl') || '2009-11-07',
+        jenisKelamin: (params.get('jk') === 'P' ? 'P' : 'L') as 'L' | 'P',
+        alamat: params.get('alamat') || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur',
+        masaBerlaku: params.get('mb') || '06/2028',
+      } as Student;
+    }
+    const dataParam = params.get('d');
+    if (dataParam) {
+      const decoded = decodeVerificationPayload(dataParam);
+      if (decoded && (decoded.nisn === verificationNisn || !decoded.nisn)) {
+        return decoded as Student;
+      }
+    }
+    return null;
+  }, [verificationNisn]);
+
+  const activeVerifiedStudent = React.useMemo(() => {
+    if (!verificationNisn) return null;
+    const cleanNisn = verificationNisn.trim().toLowerCase();
+    const found = students.find(
+      (s) =>
+        s.nisn.toLowerCase() === cleanNisn ||
+        (s.nis && s.nis.toLowerCase() === cleanNisn) ||
+        s.id.toLowerCase() === cleanNisn
+    );
+    if (found) return found;
+    if (verifiedStudentFromUrl) return verifiedStudentFromUrl;
+    return null;
+  }, [verificationNisn, students, verifiedStudentFromUrl]);
+
+  // Render Fullscreen Digital Card Verification Portal if ?verify=... is in URL
+  if (verificationNisn) {
+    return (
+      <CardVerificationView
+        student={activeVerifiedStudent}
+        settings={cardSettings}
+        nisnQuery={verificationNisn}
+        allStudents={students}
+        onSelectStudent={(std) => {
+          setVerificationNisn(std.nisn);
+          const newUrl = `${window.location.pathname}?verify=${encodeURIComponent(std.nisn)}`;
+          window.history.pushState({}, '', newUrl);
+        }}
+        onBackToDashboard={() => {
+          setVerificationNisn(null);
+          window.history.pushState({}, '', window.location.pathname);
+        }}
+      />
+    );
+  }
+
   // Render Fullscreen Batch Print View if active
   if (isBatchPrintOpen) {
     return (
@@ -494,6 +600,18 @@ export default function App() {
                 <span className="md:hidden">Google</span>
               </button>
             )}
+
+            <button
+              onClick={() => {
+                const std = students.find((s) => s.id === previewStudentId) || students[0];
+                if (std) handleOpenVerification(std);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 transition-colors cursor-pointer"
+              title="Buka Halaman Verifikasi Keaslian Kartu (Simulasi Scan QR)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden md:inline">Verifikasi QR</span>
+            </button>
 
             <button
               onClick={() => setIsZipModalOpen(true)}
@@ -639,6 +757,7 @@ export default function App() {
               selectedStudentId={previewStudentId}
               onSelectStudentId={setPreviewStudentId}
               onExportSingleCard={handleExportSingleCard}
+              onOpenVerification={handleOpenVerification}
             />
           </div>
         ) : (
@@ -679,6 +798,7 @@ export default function App() {
               onOpenWebcamForStudent={(s) => setWebcamStudent(s)}
               onOpenZipModal={() => setIsZipModalOpen(true)}
               onTriggerPrint={handleTriggerPrint}
+              onOpenVerification={handleOpenVerification}
             />
           </div>
         )}
@@ -713,6 +833,7 @@ export default function App() {
         onClose={() => setSinglePreviewStudent(null)}
         onPrintSingle={handlePrintSingle}
         onExportSingleCard={handleExportSingleCard}
+        onOpenVerification={handleOpenVerification}
       />
 
       <WebcamModal

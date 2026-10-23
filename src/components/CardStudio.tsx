@@ -11,10 +11,21 @@ import {
   Upload,
   RefreshCw,
   Sparkles,
+  ShieldCheck,
+  Copy,
+  ExternalLink,
+  QrCode,
 } from 'lucide-react';
 import { CardSettings, CardTemplateStyle, CardThemePreset, Student } from '../types';
 import { StudentCard } from './StudentCard';
-import { THEME_PRESETS, SMAN1_JULOK_LOGO_SVG, OFFICIAL_STAMP_SVG, OFFICIAL_SIGNATURE_SVG } from '../data/defaults';
+import { buildStudentVerificationUrl } from '../utils/barcodeGenerator';
+import {
+  THEME_PRESETS,
+  SMAN1_JULOK_LOGO_PATH,
+  ACEH_GOV_LOGO_PATH,
+  OFFICIAL_STAMP_SVG,
+  OFFICIAL_SIGNATURE_SVG,
+} from '../data/defaults';
 
 interface CardStudioProps {
   settings: CardSettings;
@@ -23,6 +34,7 @@ interface CardStudioProps {
   selectedStudentId: string;
   onSelectStudentId: (id: string) => void;
   onExportSingleCard: (student: Student, side: 'front' | 'back' | 'both') => void;
+  onOpenVerification?: (student: Student) => void;
 }
 
 export const CardStudio: React.FC<CardStudioProps> = ({
@@ -32,11 +44,13 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   selectedStudentId,
   onSelectStudentId,
   onExportSingleCard,
+  onOpenVerification,
 }) => {
   const [activeTab, setActiveTab] = useState<'template' | 'theme' | 'layout' | 'school' | 'legal' | 'back'>('template');
   const [cardSide, setCardSide] = useState<'front' | 'back'>('front');
   const [isFlipping, setIsFlipping] = useState(false);
   const [zoomScale, setZoomScale] = useState<number>(1.2);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const currentStudent = students.find((s) => s.id === selectedStudentId) || students[0];
 
@@ -63,6 +77,17 @@ export const CardStudio: React.FC<CardStudioProps> = ({
       const reader = new FileReader();
       reader.onload = () => {
         onUpdateSettings({ ...settings, schoolLogo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAcehLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        onUpdateSettings({ ...settings, pancasilaLogo: reader.result as string, showPancasila: true });
       };
       reader.readAsDataURL(file);
     }
@@ -136,6 +161,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                   settings={settings}
                   side={cardSide}
                   scale={zoomScale}
+                  onOpenVerification={onOpenVerification}
                 />
               )}
             </div>
@@ -184,6 +210,66 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             )}
           </div>
         </div>
+
+        {/* Digital Verification Link & Authenticity Test Box */}
+        {currentStudent && (
+          <div className="w-full mt-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 rounded-2xl p-4 shadow-xs">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-emerald-950">
+                    Tautan Verifikasi Keaslian Kartu Siswa
+                  </h4>
+                  <p className="text-[11px] text-emerald-800 font-medium">
+                    {currentStudent.nama} • NISN: {currentStudent.nisn}
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                ● Link QR Aktif
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600 mt-2 leading-relaxed">
+              QR Code dan Barcode pada kartu terhubung ke tautan verifikasi keaslian digital.
+              Ketika di-scan dengan kamera smartphone, halaman sertifikat keabsahan resmi akan terbuka secara otomatis.
+            </p>
+
+            <div className="mt-3 pt-3 border-t border-emerald-200/80 flex flex-wrap items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  if (onOpenVerification) {
+                    onOpenVerification(currentStudent);
+                  } else {
+                    window.open(buildStudentVerificationUrl(currentStudent, settings), '_blank');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Uji Buka Halaman Verifikasi Keaslian</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = buildStudentVerificationUrl(currentStudent, settings);
+                  navigator.clipboard.writeText(url).then(() => {
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  });
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5 text-slate-500" />
+                <span>{copiedLink ? 'Tautan Tersalin! ✓' : 'Salin Tautan'}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right Column: Settings & Customizer Tabs (7 Cols) */}
@@ -647,10 +733,10 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 onChange={(e) => onUpdateSettings({ ...settings, qrContent: e.target.value as any })}
                 className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
               >
-                <option value="nisn">Nomor NISN Siswa (Standar Kemendikbud)</option>
-                <option value="nis">Nomor Induk Siswa (NIS Lokal Sekolah)</option>
-                <option value="all_info">Data Lengkap Siswa (JSON: Nama, TTL, Kelas)</option>
-                <option value="url">Tautan Verifikasi Web Sekolah</option>
+                <option value="url">Tautan Verifikasi Keaslian Kartu (Bisa Di-scan & Dibuka di HP)</option>
+                <option value="nisn">Nomor NISN Siswa (Teks Standar)</option>
+                <option value="nis">Nomor Induk Siswa (NIS Lokal)</option>
+                <option value="all_info">Data Lengkap Siswa (JSON)</option>
               </select>
             </div>
           </div>
@@ -779,8 +865,8 @@ export const CardStudio: React.FC<CardStudioProps> = ({
 
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block">Lambang Garuda Pancasila (Kiri Atas)</span>
-                  <span className="text-[10px] text-slate-500">Perisai hijau dengan garuda emas</span>
+                  <span className="text-xs font-bold text-slate-800 block">Logo Pemerintah Aceh (Kanan Atas)</span>
+                  <span className="text-[10px] text-slate-500">Lambang Pancacita Pemerintah Aceh</span>
                 </div>
                 <input
                   type="checkbox"
@@ -804,24 +890,24 @@ export const CardStudio: React.FC<CardStudioProps> = ({
               </div>
             </div>
 
-            {/* School Logo custom upload */}
+            {/* Logo Sekolah (Kiri Atas) custom upload */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <img
                   src={settings.schoolLogo}
                   alt="Logo Sekolah"
-                  className="w-10 h-10 object-contain p-1 border rounded-lg bg-slate-50"
+                  className="w-10 h-10 object-contain p-1 border rounded-lg bg-slate-50 shadow-2xs"
                 />
                 <div>
-                  <span className="text-xs font-bold text-slate-800 block">Logo Sekolah</span>
-                  <span className="text-[10px] text-slate-500">Format PNG / JPG / SVG transparan</span>
+                  <span className="text-xs font-bold text-slate-800 block">Logo Sekolah (Kiri Atas)</span>
+                  <span className="text-[10px] text-slate-500">SMA Negeri 1 Julok (PNG Resmi)</span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <label className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-colors inline-flex items-center gap-1">
                   <Upload className="w-3.5 h-3.5" />
-                  <span>Unggah Logo</span>
+                  <span>Ganti</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -831,9 +917,45 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 </label>
                 <button
                   type="button"
-                  onClick={() => onUpdateSettings({ ...settings, schoolLogo: SMAN1_JULOK_LOGO_SVG })}
+                  onClick={() => onUpdateSettings({ ...settings, schoolLogo: SMAN1_JULOK_LOGO_PATH })}
                   className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 cursor-pointer"
-                  title="Kembalikan ke lambang default SMAN 1 Julok"
+                  title="Kembalikan ke lambang resmi SMAN 1 Julok"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Logo Pemerintah Aceh (Kanan Atas) custom upload */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <img
+                  src={settings.pancasilaLogo}
+                  alt="Logo Pemerintah Aceh"
+                  className="w-10 h-10 object-contain p-1 border rounded-lg bg-slate-50 shadow-2xs"
+                />
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Logo Pemerintah Aceh (Kanan Atas)</span>
+                  <span className="text-[10px] text-slate-500">Lambang Pancacita (PNG Resmi)</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer transition-colors inline-flex items-center gap-1">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Ganti</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAcehLogoUpload}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onUpdateSettings({ ...settings, pancasilaLogo: ACEH_GOV_LOGO_PATH })}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 cursor-pointer"
+                  title="Kembalikan ke lambang resmi Pemerintah Aceh"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>

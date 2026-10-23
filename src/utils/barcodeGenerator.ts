@@ -22,28 +22,77 @@ export async function generateQrDataUrl(text: string, color = '#0f172a'): Promis
 }
 
 /**
- * Resolve QR text string according to CardSettings
+ * Get base URL for active verification link
  */
-export function getQrStringForStudent(student: Student, settings: CardSettings): string {
-  switch (settings.qrContent) {
-    case 'nis':
-      return student.nis || student.nisn;
-    case 'all_info':
-      return JSON.stringify({
-        sekolah: settings.schoolName,
-        nisn: student.nisn,
-        nis: student.nis,
-        nama: student.nama,
-        kelas: student.kelas,
-        ttl: `${student.tempatLahir}, ${student.tanggalLahir}`,
-        jk: student.jenisKelamin,
-      });
-    case 'url':
-      return `https://sman1julok.sch.id/siswa/verifikasi/${student.nisn}`;
-    case 'nisn':
-    default:
-      return student.nisn;
+export function getAppBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.location) {
+    const origin = window.location.origin;
+    if (origin && origin.startsWith('http') && origin !== 'null' && !origin.includes('about:blank')) {
+      const cleanPath = window.location.pathname.replace(/\/$/, '');
+      return `${origin}${cleanPath}`;
+    }
   }
+  // Default to the provided deployment shared app URL
+  return 'https://ais-pre-qpz6ffx3eczklto7nc75cz-353035226398.asia-southeast1.run.app';
+}
+
+/**
+ * Construct an active verification URL that opens the authenticity preview portal
+ * Starts with https:// so smartphone cameras immediately prompt to open as a web link
+ */
+export function buildStudentVerificationUrl(student: Student, settings?: CardSettings): string {
+  const baseUrl = getAppBaseUrl();
+  const params = new URLSearchParams();
+  
+  // Mandatory verification identifier
+  params.set('verify', student.nisn || student.id);
+  
+  // Clean readable student parameters so phone cameras can verify instantly anywhere
+  if (student.nama) params.set('nama', student.nama);
+  if (student.nis) params.set('nis', student.nis);
+  if (student.kelas) params.set('kelas', student.kelas);
+  if (student.tempatLahir) params.set('tl', student.tempatLahir);
+  if (student.tanggalLahir) params.set('tgl', student.tanggalLahir);
+  if (student.jenisKelamin) params.set('jk', student.jenisKelamin);
+  if (student.masaBerlaku) params.set('mb', student.masaBerlaku);
+
+  return `${baseUrl}/?${params.toString()}`;
+}
+
+/**
+ * Decode compact verification payload from URL parameter
+ */
+export function decodeVerificationPayload(encodedStr: string): Partial<Student> | null {
+  try {
+    const jsonStr = decodeURIComponent(escape(atob(decodeURIComponent(encodedStr))));
+    const parsed = JSON.parse(jsonStr);
+    return {
+      id: parsed.id || `verif-${parsed.nisn}`,
+      nisn: parsed.nisn,
+      nis: parsed.nis || '',
+      nama: parsed.nama || 'SISWA TERVERIFIKASI',
+      kelas: parsed.kelas || '',
+      jurusan: parsed.jurusan || '',
+      tempatLahir: parsed.tl || '',
+      tanggalLahir: parsed.tgl || '',
+      jenisKelamin: parsed.jk === 'P' ? 'P' : 'L',
+      alamat: parsed.al || '',
+      masaBerlaku: parsed.mb || '06/2028',
+    };
+  } catch (e) {
+    console.warn('Failed decoding verification payload', e);
+    return null;
+  }
+}
+
+/**
+ * Resolve QR text string according to CardSettings
+ * Always guarantees returning an active https:// link so scanning with any phone camera
+ * immediately opens the student's authentic card preview!
+ */
+export function getQrStringForStudent(student: Student, settings?: CardSettings): string {
+  // Always return the active URL verification link so scanning with camera is 100% active
+  return buildStudentVerificationUrl(student, settings);
 }
 
 /**
