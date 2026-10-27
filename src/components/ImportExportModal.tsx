@@ -66,7 +66,7 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setSpreadsheetFile(file);
       const result = await parseSpreadsheetFile(file);
       if (result.rows.length === 0) {
-        setImportError('File kosong atau format tidak sesuai.');
+        setImportError('File kosong atau tidak ditemukan baris data siswa yang valid.');
         setIsProcessing(false);
         return;
       }
@@ -74,19 +74,39 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
       setRawRows(result.rows);
       const detected = autoDetectColumns(result.headers);
       setColumnMapping(detected);
+
+      if (!detected.nama) {
+        setImportError('Perhatian: Kolom "Nama Lengkap" belum terdeteksi otomatis. Silakan pilih kolom nama pada daftar pemetaan di bawah.');
+      }
     } catch (err: any) {
-      console.error(err);
-      setImportError(`Gagal membaca file: ${err.message || 'Format tidak valid'}`);
+      console.error('File parsing error:', err);
+      setImportError(`Gagal membaca file: ${err.message || 'Format spreadsheet tidak valid'}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleExecuteImport = () => {
-    if (!rawRows.length || !columnMapping) return;
+    if (!rawRows.length || !columnMapping) {
+      setImportError('Tidak ada data siswa untuk diimpor.');
+      return;
+    }
+
+    if (!columnMapping.nama) {
+      setImportError('Kolom "Nama Lengkap" wajib dipilih sebelum melanjutkan impor.');
+      return;
+    }
 
     try {
+      setIsProcessing(true);
+      setImportError('');
       const parsedStudents = convertRowsToStudents(rawRows, columnMapping);
+      if (parsedStudents.length === 0) {
+        setImportError('Tidak ada data siswa yang berhasil diekstrak. Pastikan isi tabel tidak kosong.');
+        setIsProcessing(false);
+        return;
+      }
+
       onImportStudents(parsedStudents, replaceExisting);
       setImportSuccessMsg(`Berhasil mengimpor ${parsedStudents.length} data siswa!`);
       setTimeout(() => {
@@ -95,9 +115,12 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         setRawRows([]);
         setColumnMapping(null);
         setImportSuccessMsg('');
+        setIsProcessing(false);
       }, 1200);
     } catch (err: any) {
-      setImportError(`Gagal memproses data: ${err.message}`);
+      console.error('Import processing error:', err);
+      setImportError(`Gagal memproses data: ${err.message || 'Terjadi kesalahan sistem'}`);
+      setIsProcessing(false);
     }
   };
 
@@ -359,6 +382,26 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
                       <div>
                         <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                          Kolom TTL (Tempat & Tgl Lahir Gabung)
+                        </label>
+                        <select
+                          value={columnMapping.ttl || ''}
+                          onChange={(e) =>
+                            setColumnMapping({ ...columnMapping, ttl: e.target.value })
+                          }
+                          className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs"
+                        >
+                          <option value="">-- Lewati / Kolom Terpisah --</option>
+                          {rawHeaders.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">
                           Kolom Tempat Lahir
                         </label>
                         <select
@@ -419,6 +462,26 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
 
                       <div>
                         <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                          Kolom Jurusan / Fase
+                        </label>
+                        <select
+                          value={columnMapping.jurusan || ''}
+                          onChange={(e) =>
+                            setColumnMapping({ ...columnMapping, jurusan: e.target.value })
+                          }
+                          className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs"
+                        >
+                          <option value="">-- Lewati / Otomatis --</option>
+                          {rawHeaders.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">
                           Kolom Alamat
                         </label>
                         <select
@@ -439,6 +502,53 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Live Data Preview Table (First 3 Rows) */}
+                {rawRows.length > 0 && columnMapping && (
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                        Pratinjau Hasil Ekstraksi (3 Baris Pertama)
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Total {rawRows.length} baris terdeteksi
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto text-[11px]">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-slate-500">
+                            <th className="py-1 px-2 font-semibold">Nama Siswa</th>
+                            <th className="py-1 px-2 font-semibold">NISN</th>
+                            <th className="py-1 px-2 font-semibold">NIS</th>
+                            <th className="py-1 px-2 font-semibold">L/P</th>
+                            <th className="py-1 px-2 font-semibold">TTL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {rawRows.slice(0, 3).map((r, i) => {
+                            const nama = columnMapping.nama ? r[columnMapping.nama] : '(Belum dipetakan)';
+                            const nisn = columnMapping.nisn ? r[columnMapping.nisn] : '-';
+                            const nis = columnMapping.nis ? r[columnMapping.nis] : '-';
+                            const jk = columnMapping.jenisKelamin ? r[columnMapping.jenisKelamin] : 'L';
+                            const ttl = columnMapping.ttl
+                              ? r[columnMapping.ttl]
+                              : `${columnMapping.tempatLahir ? r[columnMapping.tempatLahir] : ''}, ${columnMapping.tanggalLahir ? r[columnMapping.tanggalLahir] : ''}`;
+                            return (
+                              <tr key={i} className="hover:bg-slate-100/60">
+                                <td className="py-1 px-2 font-bold text-slate-800 truncate max-w-[140px]">{String(nama || '-')}</td>
+                                <td className="py-1 px-2 font-mono text-slate-700">{String(nisn || '-')}</td>
+                                <td className="py-1 px-2 font-mono text-slate-700">{String(nis || '-')}</td>
+                                <td className="py-1 px-2 font-semibold text-slate-700">{String(jk || 'L')}</td>
+                                <td className="py-1 px-2 text-slate-600 truncate max-w-[140px]">{String(ttl || '-')}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 {/* Import options */}
                 <div className="flex items-center gap-3 pt-2">
@@ -625,9 +735,12 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
             {activeTab === 'import' && rawRows.length > 0 && (
               <button
                 onClick={handleExecuteImport}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-xs cursor-pointer"
+                disabled={isProcessing}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-xs cursor-pointer transition-all"
               >
-                <span>Mulai Impor ({rawRows.length} Siswa)</span>
+                <span>
+                  {isProcessing ? 'Memproses Impor...' : `Mulai Impor (${rawRows.length} Siswa)`}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}

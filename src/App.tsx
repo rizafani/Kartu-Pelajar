@@ -52,6 +52,7 @@ import {
   signOutUser,
   saveStudentToFirestore,
   deleteStudentFromFirestore,
+  clearUserStudentsInFirestore,
   batchSaveStudentsToFirestore,
   saveSettingsToFirestore,
   loadSettingsFromFirestore,
@@ -386,12 +387,15 @@ export default function App() {
     } else {
       setStudents((prev) => [...newStudents, ...prev]);
     }
-    showToast(`Berhasil mengimpor ${newStudents.length} siswa.`);
+    showToast(`Berhasil mengimpor ${newStudents.length} data siswa.`);
     if (currentUser) {
       try {
+        if (replaceExisting) {
+          await clearUserStudentsInFirestore(currentUser.uid);
+        }
         await batchSaveStudentsToFirestore(newStudents, currentUser.uid);
       } catch (err) {
-        console.error('Failed batch saving imported students', err);
+        console.error('Failed batch saving imported students to Firestore', err);
       }
     }
   };
@@ -798,6 +802,7 @@ export default function App() {
               onOpenCardPreview={(s) => setSinglePreviewStudent(s)}
               onOpenWebcamForStudent={(s) => setWebcamStudent(s)}
               onOpenZipModal={() => setIsZipModalOpen(true)}
+              onOpenImportModal={() => setIsImportModalOpen(true)}
               onTriggerPrint={handleTriggerPrint}
               onOpenVerification={handleOpenVerification}
             />

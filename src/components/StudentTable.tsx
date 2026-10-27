@@ -12,6 +12,7 @@ import {
   Printer,
   Eye,
   FileArchive,
+  FileSpreadsheet,
   Upload,
   UserCheck,
   UserX,
@@ -34,6 +35,7 @@ interface StudentTableProps {
   onOpenCardPreview: (student: Student) => void;
   onOpenWebcamForStudent: (student: Student) => void;
   onOpenZipModal: () => void;
+  onOpenImportModal?: () => void;
   onTriggerPrint: (mode?: 'selected' | 'all') => void;
   onOpenVerification?: (student: Student) => void;
 }
@@ -50,6 +52,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   onOpenCardPreview,
   onOpenWebcamForStudent,
   onOpenZipModal,
+  onOpenImportModal,
   onTriggerPrint,
   onOpenVerification,
 }) => {
@@ -225,6 +228,18 @@ export const StudentTable: React.FC<StudentTableProps> = ({
 
         {/* Buttons: Mass ZIP Upload, Add Student & Batch Print */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Import Excel / CSV Button */}
+          {onOpenImportModal && (
+            <button
+              onClick={onOpenImportModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
+              title="Impor data siswa dari file Excel (.xlsx) atau CSV"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Impor Excel / CSV</span>
+            </button>
+          )}
+
           {/* Mass ZIP Upload Button */}
           <button
             onClick={onOpenZipModal}

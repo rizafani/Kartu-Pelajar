@@ -22,6 +22,7 @@ export interface ColumnMapping {
  */
 function normalizeHeader(h: string): string {
   return h
+    .replace(/^\uFEFF/, '') // Strip UTF-8 BOM
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 }
@@ -47,30 +48,92 @@ export function autoDetectColumns(headers: string[]): ColumnMapping {
 
   headers.forEach((original) => {
     const norm = normalizeHeader(original);
+    if (!norm) return;
     
-    if (!mapping.nisn && (norm.includes('nisn') || norm === 'noinduksiswanasional')) {
+    // NISN detection (Dapodik: Nomor Induk Siswa Nasional / NISN)
+    if (!mapping.nisn && (norm.includes('nisn') || norm.includes('noinduksiswanasional') || norm.includes('nomorinduksiswanasional') || norm.includes('noinduknasional'))) {
       mapping.nisn = original;
-    } else if (!mapping.nis && (norm === 'nis' || norm === 'nipd' || norm === 'noinduk' || norm === 'nomorinduk')) {
+    }
+    // NIS / NIPD detection
+    else if (!mapping.nis && (norm === 'nis' || norm === 'nipd' || norm === 'noinduk' || norm === 'nomorinduk' || norm.includes('induksekolah') || norm.includes('indukpesertadidik') || norm === 'nisnipd')) {
       mapping.nis = original;
-    } else if (!mapping.nama && (norm.includes('namasiswa') || norm.includes('namalengkap') || norm === 'nama')) {
+    }
+    // Student Name (Dapodik: Nama Peserta Didik, EMIS: Nama Lengkap, Raport: Nama Siswa)
+    else if (!mapping.nama && (
+      norm.includes('namapesertadidik') ||
+      norm.includes('namasiswa') ||
+      norm.includes('namalengkap') ||
+      norm.includes('pesertadidik') ||
+      norm.includes('namamurid') ||
+      norm === 'nama'
+    )) {
       mapping.nama = original;
-    } else if (!mapping.ttl && (norm === 'ttl' || norm === 'tempattanggallahir' || norm === 'tempatdantanggallahir')) {
+    }
+    // Combined TTL
+    else if (!mapping.ttl && (
+      norm === 'ttl' ||
+      norm.includes('tempattanggallahir') ||
+      norm.includes('tempattgllahir') ||
+      norm.includes('tempatdantanggallahir') ||
+      norm.includes('tempatdantgllahir') ||
+      norm.includes('tempattgl')
+    )) {
       mapping.ttl = original;
-    } else if (!mapping.tempatLahir && (norm.includes('tempatlahir') || norm.includes('tmplahir'))) {
+    }
+    // Birth Place
+    else if (!mapping.tempatLahir && (norm.includes('tempatlahir') || norm.includes('tmplahir') || norm.includes('tmptlahir') || norm.includes('kotalahir'))) {
       mapping.tempatLahir = original;
-    } else if (!mapping.tanggalLahir && (norm.includes('tanggallahir') || norm.includes('tgllahir') || norm.includes('tglhr'))) {
+    }
+    // Birth Date
+    else if (!mapping.tanggalLahir && (norm.includes('tanggallahir') || norm.includes('tgllahir') || norm.includes('tglhr') || norm.includes('tgllhr') || norm === 'tgl')) {
       mapping.tanggalLahir = original;
-    } else if (!mapping.jenisKelamin && (norm === 'jk' || norm.includes('jeniskelamin') || norm === 'gender' || norm === 'lp')) {
+    }
+    // Gender / JK
+    else if (!mapping.jenisKelamin && (
+      norm === 'jk' ||
+      norm.includes('jeniskelamin') ||
+      norm === 'gender' ||
+      norm === 'lp' ||
+      norm.includes('kelamin')
+    )) {
       mapping.jenisKelamin = original;
-    } else if (!mapping.kelas && (norm === 'kelas' || norm === 'rombel' || norm === 'tingkat' || norm === 'kelasrombel')) {
+    }
+    // Class / Rombel (Dapodik: Rombongan Belajar, Rombel Saat Ini)
+    else if (!mapping.kelas && (
+      norm === 'kelas' ||
+      norm.includes('rombel') ||
+      norm.includes('rombonganbelajar') ||
+      norm.includes('tingkat') ||
+      norm.includes('kelasrombel')
+    )) {
       mapping.kelas = original;
-    } else if (!mapping.jurusan && (norm.includes('jurusan') || norm.includes('peminatan') || norm.includes('programkeahlian'))) {
+    }
+    // Jurusan / Peminatan / Fase Kurikulum Merdeka
+    else if (!mapping.jurusan && (
+      norm.includes('jurusan') ||
+      norm.includes('peminatan') ||
+      norm.includes('programkeahlian') ||
+      norm.includes('kompetensikeahlian') ||
+      norm.includes('fase')
+    )) {
       mapping.jurusan = original;
-    } else if (!mapping.alamat && (norm.includes('alamat') || norm.includes('domisili') || norm.includes('desa'))) {
+    }
+    // Address (Dapodik: Alamat Jalan)
+    else if (!mapping.alamat && (
+      norm.includes('alamat') ||
+      norm.includes('domisili') ||
+      norm.includes('tempattinggal') ||
+      norm.includes('gampong') ||
+      norm.includes('desa')
+    )) {
       mapping.alamat = original;
-    } else if (!mapping.golonganDarah && (norm.includes('goldarah') || norm.includes('golongandarah') || norm === 'darah')) {
+    }
+    // Blood type
+    else if (!mapping.golonganDarah && (norm.includes('goldarah') || norm.includes('golongandarah') || norm === 'darah')) {
       mapping.golonganDarah = original;
-    } else if (!mapping.foto && (norm.includes('foto') || norm.includes('gambar') || norm.includes('pasfoto') || norm.includes('image'))) {
+    }
+    // Photo
+    else if (!mapping.foto && (norm.includes('foto') || norm.includes('gambar') || norm.includes('pasfoto') || norm.includes('image') || norm.includes('photo'))) {
       mapping.foto = original;
     }
   });
@@ -84,73 +147,288 @@ export function autoDetectColumns(headers: string[]): ColumnMapping {
 function normalizeGender(val: unknown): 'L' | 'P' {
   if (!val) return 'L';
   const str = String(val).trim().toUpperCase();
-  if (str.startsWith('P') || str.includes('WANITA') || str.includes('PEREMPUAN')) {
+  if (
+    str.startsWith('P') ||
+    str.includes('WANITA') ||
+    str.includes('PEREMPUAN') ||
+    str === '2' ||
+    str === 'F'
+  ) {
     return 'P';
   }
   return 'L';
 }
 
 /**
- * Format date values safely
+ * Indonesian month translation dictionary
+ */
+const INDO_MONTHS: Record<string, string> = {
+  januari: '01',
+  jan: '01',
+  februari: '02',
+  pebruari: '02',
+  feb: '02',
+  peb: '02',
+  maret: '03',
+  mar: '03',
+  april: '04',
+  apr: '04',
+  mei: '05',
+  juni: '06',
+  jun: '06',
+  juli: '07',
+  jul: '07',
+  agustus: '08',
+  ags: '08',
+  agu: '08',
+  september: '09',
+  sep: '09',
+  sept: '09',
+  oktober: '10',
+  okt: '10',
+  november: '11',
+  nopember: '11',
+  nov: '11',
+  nop: '11',
+  desember: '12',
+  des: '12',
+};
+
+/**
+ * Format date values safely across Excel serial numbers, Indonesian text, and standard formats
  */
 function formatDate(val: unknown): string {
   if (!val) return '';
   if (val instanceof Date) {
     return val.toISOString().split('T')[0];
   }
-  const str = String(val).trim();
-  // If Excel serial number
-  if (/^\d{5}$/.test(str)) {
-    const d = new Date((Number(str) - 25569) * 86400 * 1000);
-    return isNaN(d.getTime()) ? str : d.toISOString().split('T')[0];
+
+  // If number or Excel serial number (e.g. 40123)
+  const num = typeof val === 'number' ? val : Number(String(val).trim());
+  if (!isNaN(num) && num > 10000 && num < 80000) {
+    const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
   }
+
+  let str = String(val).trim();
+  if (!str) return '';
+
+  // Check if Indonesian text date, e.g. "14 April 2008" or "14-Apr-2008"
+  const textMatch = str.match(/^(\d{1,2})[\s\-\/\.]([a-zA-Z]+)[\s\-\/\.](\d{4})$/);
+  if (textMatch) {
+    const day = textMatch[1].padStart(2, '0');
+    const mStr = textMatch[2].toLowerCase();
+    const year = textMatch[3];
+    const month = INDO_MONTHS[mStr];
+    if (month) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  // Indonesian format: DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // ISO format: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
   return str;
 }
 
 /**
- * Parse an Excel buffer or CSV text into rows
+ * Clean numeric string (NISN, NIS) to preserve leading zeroes and remove trailing decimals (.0)
+ */
+function cleanIdString(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  if (!str) return '';
+
+  // If scientific notation e.g. 7.8129341e+09
+  if (/^[0-9.]+[eE]\+[0-9]+$/.test(str)) {
+    try {
+      str = BigInt(Math.round(Number(str))).toString();
+    } catch {}
+  }
+
+  // Remove trailing .0 from Excel number parsing
+  if (str.endsWith('.0')) {
+    str = str.slice(0, -2);
+  }
+
+  return str;
+}
+
+/**
+ * Specifically format NISN: 10-digit standard in Indonesia
+ */
+function cleanNisnString(val: unknown): string {
+  const cleaned = cleanIdString(val);
+  const digits = cleaned.replace(/\D/g, '');
+  // If Excel stripped leading zeroes, restore to 10 digits
+  if (digits.length >= 8 && digits.length < 10) {
+    return digits.padStart(10, '0');
+  }
+  return digits || cleaned;
+}
+
+/**
+ * Parse an Excel buffer or CSV text into rows with smart header detection
  */
 export async function parseSpreadsheetFile(
   file: File
 ): Promise<{ headers: string[]; rows: Record<string, any>[] }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, {
-          type: typeof data === 'string' ? 'string' : 'binary',
-          cellDates: true,
-        });
+  const buffer = await file.arrayBuffer();
+  const data = new Uint8Array(buffer);
 
-        // Use the first sheet
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+  let workbook: XLSX.WorkBook;
 
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, {
-          defval: '',
-          raw: false,
-        });
+  // Check if CSV with semicolon delimiter (common in Indonesian Windows Excel)
+  if (file.name.toLowerCase().endsWith('.csv') || file.name.toLowerCase().endsWith('.txt')) {
+    const text = new TextDecoder('utf-8').decode(data);
+    const firstLines = text.split('\n').slice(0, 5).join('\n');
+    const semicolonCount = (firstLines.match(/;/g) || []).length;
+    const commaCount = (firstLines.match(/,/g) || []).length;
+    const tabCount = (firstLines.match(/\t/g) || []).length;
 
-        if (jsonData.length === 0) {
-          resolve({ headers: [], rows: [] });
-          return;
-        }
-
-        const headers = Object.keys(jsonData[0]);
-        resolve({ headers, rows: jsonData });
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = (err) => reject(err);
-
-    if (file.name.endsWith('.csv')) {
-      reader.readAsText(file);
-    } else {
-      reader.readAsBinaryString(file);
+    let fs = ',';
+    if (semicolonCount > commaCount && semicolonCount > tabCount) {
+      fs = ';';
+    } else if (tabCount > commaCount && tabCount > semicolonCount) {
+      fs = '\t';
     }
+
+    workbook = XLSX.read(text, {
+      type: 'string',
+      raw: false,
+      cellDates: true,
+      FS: fs,
+    });
+  } else {
+    // Binary Excel (.xlsx, .xls, etc.)
+    workbook = XLSX.read(data, {
+      type: 'array',
+      cellDates: true,
+      raw: false,
+    });
+  }
+
+  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+
+  // Convert to 2D Array of rows to locate true header row (bypassing Kop/Title lines)
+  const matrix: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: '',
+    blankrows: false,
   });
+
+  if (!matrix || matrix.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  // Keywords that identify a true student data table header row
+  const HEADER_KEYWORDS = [
+    'nisn', 'nis', 'nipd', 'noinduk', 'nomorinduk',
+    'nama', 'siswa', 'peserta', 'murid',
+    'tempat', 'lahir', 'ttl', 'tgl', 'tanggal',
+    'jk', 'gender', 'kelamin', 'lp',
+    'kelas', 'rombel', 'tingkat',
+    'jurusan', 'peminatan',
+    'alamat', 'jalan', 'desa', 'domisili',
+    'darah', 'foto'
+  ];
+
+  let bestHeaderRowIndex = 0;
+  let maxMatchScore = 0;
+
+  // Scan up to the first 20 rows to find the row with the most matching column keywords
+  const scanLimit = Math.min(matrix.length, 20);
+  for (let r = 0; r < scanLimit; r++) {
+    const row = matrix[r];
+    if (!Array.isArray(row)) continue;
+
+    let score = 0;
+    row.forEach((cell) => {
+      const norm = normalizeHeader(String(cell || ''));
+      if (norm && HEADER_KEYWORDS.some((kw) => norm.includes(kw))) {
+        score++;
+      }
+    });
+
+    if (score > maxMatchScore) {
+      maxMatchScore = score;
+      bestHeaderRowIndex = r;
+    }
+  }
+
+  // If no good header row was found (e.g. custom file), pick first non-empty row
+  if (maxMatchScore === 0) {
+    bestHeaderRowIndex = 0;
+    for (let r = 0; r < scanLimit; r++) {
+      if (matrix[r] && matrix[r].some((c: any) => String(c).trim() !== '')) {
+        bestHeaderRowIndex = r;
+        break;
+      }
+    }
+  }
+
+  const rawHeaderRow = matrix[bestHeaderRowIndex] || [];
+  const headers: string[] = [];
+  const headerUsageCount: Record<string, number> = {};
+
+  rawHeaderRow.forEach((h: any, idx: number) => {
+    let clean = String(h || '')
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .replace(/[\r\n]+/g, ' ');
+
+    if (!clean) {
+      clean = `Kolom_${idx + 1}`;
+    }
+
+    // Ensure unique header names
+    if (headerUsageCount[clean]) {
+      headerUsageCount[clean]++;
+      clean = `${clean}_${headerUsageCount[clean]}`;
+    } else {
+      headerUsageCount[clean] = 1;
+    }
+
+    headers.push(clean);
+  });
+
+  // Extract data rows after the header row
+  const dataRowsMatrix = matrix.slice(bestHeaderRowIndex + 1);
+  const rows: Record<string, any>[] = [];
+
+  dataRowsMatrix.forEach((rowArray) => {
+    if (!Array.isArray(rowArray)) return;
+
+    // Check if row has any non-empty data
+    const hasData = rowArray.some((val) => val !== null && val !== undefined && String(val).trim() !== '');
+    if (!hasData) return;
+
+    const rowObj: Record<string, any> = {};
+    headers.forEach((hdr, colIdx) => {
+      rowObj[hdr] = rowArray[colIdx] !== undefined ? rowArray[colIdx] : '';
+    });
+    rows.push(rowObj);
+  });
+
+  return { headers, rows };
 }
 
 /**
@@ -160,49 +438,62 @@ export function convertRowsToStudents(
   rows: Record<string, any>[],
   mapping: ColumnMapping
 ): Student[] {
-  return rows.map((row, index) => {
+  const result: Student[] = [];
+
+  rows.forEach((row, index) => {
     let tempat = mapping.tempatLahir ? String(row[mapping.tempatLahir] || '').trim() : '';
     let tanggal = mapping.tanggalLahir ? formatDate(row[mapping.tanggalLahir]) : '';
 
-    // If combined TTL column is used
+    // If combined TTL column is used (e.g. "Julok, 14 April 2008" or "Idi / 2007-09-22")
     if (mapping.ttl && row[mapping.ttl]) {
       const combined = String(row[mapping.ttl]).trim();
       const parts = combined.split(/,|\//);
       if (parts.length >= 2) {
         if (!tempat) tempat = parts[0].trim();
-        if (!tanggal) tanggal = parts.slice(1).join(',').trim();
+        if (!tanggal) tanggal = formatDate(parts.slice(1).join(',').trim());
       } else if (!tempat) {
         tempat = combined;
       }
     }
 
-    const nisnVal = mapping.nisn ? String(row[mapping.nisn] || '').trim() : '';
-    const nisVal = mapping.nis ? String(row[mapping.nis] || '').trim() : '';
-    const namaVal = mapping.nama ? String(row[mapping.nama] || '').trim() : `Siswa ${index + 1}`;
+    const rawNama = mapping.nama ? String(row[mapping.nama] || '').trim() : '';
+    const rawNisn = mapping.nisn ? cleanNisnString(row[mapping.nisn]) : '';
+    const rawNis = mapping.nis ? cleanIdString(row[mapping.nis]) : '';
+    const rawKelas = mapping.kelas ? String(row[mapping.kelas] || '').trim() : '';
+    const rawAlamat = mapping.alamat ? String(row[mapping.alamat] || '').trim() : '';
+
+    // Filter out completely blank rows
+    if (!rawNama && !rawNisn && !rawNis && !tempat && !rawAlamat) {
+      return;
+    }
+
+    const namaVal = rawNama || `Siswa ${index + 1}`;
     const jkVal = mapping.jenisKelamin ? normalizeGender(row[mapping.jenisKelamin]) : 'L';
-    const kelasVal = mapping.kelas ? String(row[mapping.kelas] || '').trim() : 'X';
-    const jurusanVal = mapping.jurusan ? String(row[mapping.jurusan] || '').trim() : '';
-    const alamatVal = mapping.alamat ? String(row[mapping.alamat] || '').trim() : 'Aceh Timur';
+    const kelasVal = rawKelas || 'X-1';
+    const jurusanVal = mapping.jurusan ? String(row[mapping.jurusan] || '').trim() : 'Umum';
+    const alamatVal = rawAlamat || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur';
     const golDarahRaw = mapping.golonganDarah ? String(row[mapping.golonganDarah] || '').trim().toUpperCase() : '-';
     const golDarahVal = ['A', 'B', 'AB', 'O'].includes(golDarahRaw) ? (golDarahRaw as any) : '-';
     const fotoVal = mapping.foto ? String(row[mapping.foto] || '').trim() : '';
 
-    return {
-      id: `std-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
-      nisn: nisnVal || `00${Math.floor(10000000 + Math.random() * 90000000)}`,
-      nis: nisVal || `${Math.floor(20000000 + Math.random() * 9000000)}`,
+    result.push({
+      id: `std-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 6)}`,
+      nisn: rawNisn || `00${Math.floor(10000000 + Math.random() * 90000000)}`,
+      nis: rawNis || `${Math.floor(20000000 + Math.random() * 9000000)}`,
       nama: namaVal,
       tempatLahir: tempat || 'Julok',
       tanggalLahir: tanggal || '2008-01-01',
       jenisKelamin: jkVal,
-      kelas: kelasVal || 'X-1',
-      jurusan: jurusanVal || 'Umum',
+      kelas: kelasVal,
+      jurusan: jurusanVal,
       alamat: alamatVal,
       golonganDarah: golDarahVal,
-      foto: fotoVal || undefined,
-      masaBerlaku: 'Selama Menjadi Siswa',
-    };
+      foto: fotoVal || '',
+      masaBerlaku: '06/2028',
+    });
   });
+
+  return result;
 }
 
 /**

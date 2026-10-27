@@ -118,15 +118,32 @@ export async function signOutUser(): Promise<void> {
   }
 }
 
+// Helper to safely strip undefined values and prepare Student object for Firestore
+function prepareStudentForFirestore(student: Student, userId: string): Record<string, any> {
+  return {
+    id: student.id,
+    nisn: student.nisn || '',
+    nis: student.nis || '',
+    nama: student.nama || 'Siswa',
+    tempatLahir: student.tempatLahir || '',
+    tanggalLahir: student.tanggalLahir || '',
+    jenisKelamin: student.jenisKelamin || 'L',
+    kelas: student.kelas || '',
+    jurusan: student.jurusan || '',
+    alamat: student.alamat || '',
+    golonganDarah: student.golonganDarah || '-',
+    foto: student.foto || '',
+    masaBerlaku: student.masaBerlaku || '06/2028',
+    ownerId: userId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 // Firestore operations for Student
 export async function saveStudentToFirestore(student: Student, userId: string): Promise<void> {
   const docPath = `students/${student.id}`;
   try {
-    const studentData = {
-      ...student,
-      ownerId: userId,
-      updatedAt: new Date().toISOString(),
-    };
+    const studentData = prepareStudentForFirestore(student, userId);
     await setDoc(doc(db, 'students', student.id), studentData);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
@@ -139,6 +156,36 @@ export async function deleteStudentFromFirestore(studentId: string): Promise<voi
     await deleteDoc(doc(db, 'students', studentId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, docPath);
+  }
+}
+
+export async function clearUserStudentsInFirestore(userId: string): Promise<void> {
+  const pathForClear = 'students';
+  try {
+    const q = query(collection(db, 'students'), where('ownerId', '==', userId));
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+
+    const chunks: string[][] = [];
+    let currentChunk: string[] = [];
+    snap.docs.forEach((d) => {
+      currentChunk.push(d.id);
+      if (currentChunk.length >= 400) {
+        chunks.push(currentChunk);
+        currentChunk = [];
+      }
+    });
+    if (currentChunk.length > 0) chunks.push(currentChunk);
+
+    for (const chunk of chunks) {
+      const batch = writeBatch(db);
+      for (const id of chunk) {
+        batch.delete(doc(db, 'students', id));
+      }
+      await batch.commit();
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, pathForClear);
   }
 }
 
@@ -159,11 +206,8 @@ export async function batchSaveStudentsToFirestore(
       const batch = writeBatch(db);
       for (const student of chunk) {
         const studentRef = doc(db, 'students', student.id);
-        batch.set(studentRef, {
-          ...student,
-          ownerId: userId,
-          updatedAt: new Date().toISOString(),
-        });
+        const studentData = prepareStudentForFirestore(student, userId);
+        batch.set(studentRef, studentData);
       }
       await batch.commit();
     }
@@ -180,13 +224,17 @@ export async function saveSettingsToFirestore(
   const settingId = `school_setting_${userId}`;
   const docPath = `settings/${settingId}`;
   try {
-    const settingsData = {
-      ...settings,
+    const cleanSettings: Record<string, any> = {
       id: settingId,
       ownerId: userId,
       updatedAt: new Date().toISOString(),
     };
-    await setDoc(doc(db, 'settings', settingId), settingsData);
+    for (const [k, v] of Object.entries(settings)) {
+      if (v !== undefined) {
+        cleanSettings[k] = v;
+      }
+    }
+    await setDoc(doc(db, 'settings', settingId), cleanSettings);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
   }
