@@ -86,5 +86,32 @@ service cloud.firestore {
 
       allow delete: if isAdmin() && isValidId(settingId);
     }
+
+    function isValidClass(data) {
+      return data.keys().hasAll(['nama', 'ownerId']) &&
+             data.nama is string && data.nama.size() > 0 && data.nama.size() <= 100 &&
+             data.ownerId is string && data.ownerId == request.auth.uid;
+    }
+
+    // Classes Collection
+    match /classes/{classId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(classId) &&
+                       isValidClass(incoming()) &&
+                       incoming().ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(classId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin()) &&
+                       incoming().ownerId == existing().ownerId &&
+                       isValidClass(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(classId) &&
+                       (existing().ownerId == request.auth.uid || isAdmin());
+    }
   }
 }

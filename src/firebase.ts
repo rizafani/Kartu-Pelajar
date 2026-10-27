@@ -21,7 +21,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { Student, CardSettings } from './types';
+import { Student, CardSettings, ClassInfo } from './types';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
@@ -252,5 +252,73 @@ export async function loadSettingsFromFirestore(userId: string): Promise<CardSet
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, docPath);
+  }
+}
+
+// Firestore operations for Classes
+export function prepareClassForFirestore(cls: ClassInfo, userId: string): Record<string, any> {
+  const clean: Record<string, any> = {
+    id: cls.id,
+    nama: cls.nama,
+    tingkat: cls.tingkat || 'X',
+    fase: cls.fase || '',
+    jurusan: cls.jurusan || '',
+    waliKelas: cls.waliKelas || '',
+    nipWaliKelas: cls.nipWaliKelas || '',
+    tahunAjaran: cls.tahunAjaran || '2024/2025',
+    ruangan: cls.ruangan || '',
+    keterangan: cls.keterangan || '',
+    ownerId: userId,
+    updatedAt: new Date().toISOString(),
+  };
+  return clean;
+}
+
+export async function saveClassToFirestore(cls: ClassInfo, userId: string): Promise<void> {
+  const docPath = `classes/${cls.id}`;
+  try {
+    const data = prepareClassForFirestore(cls, userId);
+    await setDoc(doc(db, 'classes', cls.id), data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, docPath);
+  }
+}
+
+export async function deleteClassFromFirestore(classId: string): Promise<void> {
+  const docPath = `classes/${classId}`;
+  try {
+    await deleteDoc(doc(db, 'classes', classId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, docPath);
+  }
+}
+
+export async function batchSaveClassesToFirestore(
+  classesList: ClassInfo[],
+  userId: string
+): Promise<void> {
+  if (classesList.length === 0) return;
+  const pathForBatch = 'classes';
+  try {
+    const batch = writeBatch(db);
+    for (const cls of classesList) {
+      const classRef = doc(db, 'classes', cls.id);
+      batch.set(classRef, prepareClassForFirestore(cls, userId));
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, pathForBatch);
+  }
+}
+
+export async function loadClassesFromFirestore(userId: string): Promise<ClassInfo[]> {
+  const docPath = 'classes';
+  try {
+    const q = query(collection(db, 'classes'), where('ownerId', '==', userId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as ClassInfo);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, docPath);
+    return [];
   }
 }

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { CardSettings, PrintSettings, Student } from '../types';
 import { StudentCard } from './StudentCard';
-import JSZip from 'jszip';
+import { downloadClassCardsAsZip, CardResolution, RESOLUTION_OPTIONS } from '../utils/cardExporter';
 
 interface BatchPrintViewProps {
   students: Student[];
@@ -32,6 +32,7 @@ export const BatchPrintView: React.FC<BatchPrintViewProps> = ({
   const [isExportingZip, setIsExportingZip] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [exportResolution, setExportResolution] = useState<CardResolution>('high');
 
   const handlePrint = () => {
     window.print();
@@ -53,36 +54,27 @@ export const BatchPrintView: React.FC<BatchPrintViewProps> = ({
   const handleExportZip = async () => {
     setIsExportingZip(true);
     setErrorMsg('');
-    setExportProgress('Menyiapkan berkas ZIP...');
+    setExportProgress('Menyiapkan berkas ZIP gambar kartu...');
     try {
-      const zip = new JSZip();
-      const folder = zip.folder(`Kartu_Pelajar_SMAN1_Julok_${Date.now()}`);
+      const sideOption: 'front' | 'back' | 'both' =
+        printSettings.printMode === 'front_only'
+          ? 'front'
+          : printSettings.printMode === 'back_only'
+          ? 'back'
+          : 'both';
 
-      for (let i = 0; i < students.length; i++) {
-        const std = students[i];
-        setExportProgress(`Menyusun data siswa ${i + 1}/${students.length}: ${std.nama}`);
-        
-        folder?.file(
-          `${std.nisn}_${std.nama.replace(/[^a-zA-Z0-9]/g, '_')}_info.txt`,
-          `SMA NEGERI 1 JULOK\n` +
-          `NISN: ${std.nisn}\n` +
-          `NIS: ${std.nis}\n` +
-          `Nama: ${std.nama}\n` +
-          `Kelas: ${std.kelas}\n` +
-          `TTL: ${std.tempatLahir}, ${std.tanggalLahir}\n` +
-          `Alamat: ${std.alamat}\n`
-        );
-      }
-
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Paket_Kartu_Pelajar_SMAN1_Julok_${new Date().toISOString().slice(0, 10)}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadClassCardsAsZip(
+        students,
+        'Cetak_Batch',
+        settings,
+        sideOption,
+        exportResolution,
+        (current, total, label) => {
+          setExportProgress(`Memproses gambar ${current}/${total}: ${label}`);
+        }
+      );
     } catch (err: any) {
-      setErrorMsg(`Gagal membuat ZIP: ${err.message}`);
+      setErrorMsg(`Gagal membuat ZIP: ${err?.message || 'Terjadi kesalahan'}`);
     } finally {
       setIsExportingZip(false);
       setExportProgress('');
@@ -189,6 +181,20 @@ export const BatchPrintView: React.FC<BatchPrintViewProps> = ({
 
           {/* Action buttons: Print & ZIP */}
           <div className="flex items-center gap-2">
+            <select
+              value={exportResolution}
+              onChange={(e) => setExportResolution(e.target.value as CardResolution)}
+              disabled={isExportingZip}
+              className="bg-slate-800 text-white text-xs rounded-xl px-2.5 py-2 border border-slate-700 focus:outline-none cursor-pointer"
+              title="Pilih Resolusi Ekspor Gambar ZIP"
+            >
+              {RESOLUTION_OPTIONS.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.badge} ({r.name.split(' (')[0]})
+                </option>
+              ))}
+            </select>
+
             <button
               onClick={handleExportZip}
               disabled={isExportingZip}
@@ -208,6 +214,19 @@ export const BatchPrintView: React.FC<BatchPrintViewProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Progress & Error status bar */}
+      {isExportingZip && (
+        <div className="print:hidden bg-blue-600/20 border-b border-blue-500/30 px-6 py-2.5 flex items-center justify-center gap-3 text-xs text-blue-200 animate-pulse">
+          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <span>{exportProgress || 'Sedang memproses kartu ke format gambar PNG...'}</span>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="print:hidden bg-rose-600/20 border-b border-rose-500/30 px-6 py-2 text-center text-xs text-rose-300">
+          {errorMsg}
+        </div>
+      )}
 
       {/* Sheet Canvas Preview Area */}
       <main className="flex-1 p-4 sm:p-8 flex flex-col items-center gap-8 overflow-y-auto">

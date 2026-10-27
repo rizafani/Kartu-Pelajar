@@ -1,24 +1,94 @@
+import JSZip from 'jszip';
 import { CardSettings, Student } from '../types';
 import { generateBarcodeSvg, generateQrDataUrl, getQrStringForStudent } from './barcodeGenerator';
 
+export type CardResolution = 'medium' | 'high' | 'ultra' | 'max';
+
+export interface ResolutionSetting {
+  id: CardResolution;
+  name: string;
+  badge: string;
+  dpi: number;
+  scale: number;
+  dimLandscape: string;
+  dimPortrait: string;
+  desc: string;
+  fileSizeApprox: string;
+}
+
+export const RESOLUTION_OPTIONS: ResolutionSetting[] = [
+  {
+    id: 'medium',
+    name: 'Sedang (Web & Arsip)',
+    badge: '150 DPI',
+    dpi: 150,
+    scale: 0.5,
+    dimLandscape: '506 × 319 px',
+    dimPortrait: '319 × 506 px',
+    desc: 'Ukuran file ringan (~120 KB), cepat dibagikan via WhatsApp & portal web.',
+    fileSizeApprox: '~120 KB',
+  },
+  {
+    id: 'high',
+    name: 'Standar Cetak HD (CR-80)',
+    badge: '300 DPI',
+    dpi: 300,
+    scale: 1.0,
+    dimLandscape: '1012 × 638 px',
+    dimPortrait: '638 × 1012 px',
+    desc: 'Standar resmi kartu PVC CR-80 industri untuk printer kartu & digital print.',
+    fileSizeApprox: '~450 KB',
+  },
+  {
+    id: 'ultra',
+    name: 'Sangat Tinggi (Super HD)',
+    badge: '450 DPI',
+    dpi: 450,
+    scale: 1.5,
+    dimLandscape: '1518 × 957 px',
+    dimPortrait: '957 × 1518 px',
+    desc: 'Detail sangat tajam untuk printer foto resolusi tinggi & cetak lembaran.',
+    fileSizeApprox: '~950 KB',
+  },
+  {
+    id: 'max',
+    name: 'Maksimal (Ultra HD / Retransfer)',
+    badge: '600 DPI',
+    dpi: 600,
+    scale: 2.0,
+    dimLandscape: '2024 × 1276 px',
+    dimPortrait: '1276 × 2024 px',
+    desc: 'Resolusi puncak mesin cetak PVC thermal retransfer kelas percetakan profesional.',
+    fileSizeApprox: '~1.8 MB',
+  },
+];
+
 /**
- * Render a high-resolution 300 DPI CR-80 card image (1012 x 638 pixels) onto canvas and trigger download
+ * Render a CR-80 card image with selectable resolution from medium (150 DPI) to maximum (600 DPI)
  */
-export async function downloadCardAsPng(
+export async function renderCardToBlob(
   student: Student,
   settings: CardSettings,
-  side: 'front' | 'back'
-) {
+  side: 'front' | 'back',
+  resolution: CardResolution = 'high'
+): Promise<Blob | null> {
+  const resConfig = RESOLUTION_OPTIONS.find((r) => r.id === resolution) || RESOLUTION_OPTIONS[1];
+  const scale = resConfig.scale;
+
   const isLandscape = settings.orientation === 'landscape';
-  // Standard CR-80 at 300 DPI: 1012 x 638 pixels
+  // Standard CR-80 base coordinate system: 1012 x 638 pixels
   const width = isLandscape ? 1012 : 638;
   const height = isLandscape ? 638 : 1012;
 
   const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx) return null;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.scale(scale, scale);
 
   // Background
   ctx.fillStyle = '#ffffff';
@@ -338,11 +408,92 @@ export async function downloadCardAsPng(
     ctx.fillText(`${settings.schoolName || 'SMA NEGERI 1 JULOK'}  •  ${settings.provinsiText || 'KABUPATEN ACEH TIMUR'}`, width / 2, height - 13);
   }
 
-  // Trigger download
-  const imageUri = canvas.toDataURL('image/png');
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
+/**
+ * Download a single student card as PNG image with selectable resolution
+ */
+export async function downloadCardAsPng(
+  student: Student,
+  settings: CardSettings,
+  side: 'front' | 'back',
+  resolution: CardResolution = 'high'
+) {
+  const resConfig = RESOLUTION_OPTIONS.find((r) => r.id === resolution) || RESOLUTION_OPTIONS[1];
+  const blob = await renderCardToBlob(student, settings, side, resolution);
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = imageUri;
+  a.href = url;
   const cleanName = student.nama.replace(/[^a-zA-Z0-9]/g, '_');
-  a.download = `Kartu_SMAN1_Julok_${cleanName}_${side}.png`;
+  const dpiTag = resConfig.badge.replace(/\s+/g, '');
+  a.download = `Kartu_SMAN1_Julok_${cleanName}_${side}_${dpiTag}.png`;
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Mass download all student cards for a specific class in image format (PNG packed in ZIP)
+ * with selectable resolution from medium (150 DPI) to maximum (600 DPI)
+ */
+export async function downloadClassCardsAsZip(
+  students: Student[],
+  className: string,
+  settings: CardSettings,
+  sideOption: 'front' | 'back' | 'both' = 'both',
+  resolution: CardResolution = 'high',
+  onProgress?: (current: number, total: number, label: string) => void
+): Promise<void> {
+  const resConfig = RESOLUTION_OPTIONS.find((r) => r.id === resolution) || RESOLUTION_OPTIONS[1];
+  const dpiTag = resConfig.badge.replace(/\s+/g, '');
+  const zip = new JSZip();
+  const cleanClass = (className || 'Semua_Kelas').replace(/[^a-zA-Z0-9]/g, '_');
+  const folder = zip.folder(`Kartu_Kelas_${cleanClass}_${dpiTag}`);
+
+  const totalSteps = sideOption === 'both' ? students.length * 2 : students.length;
+  let currentStep = 0;
+
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i];
+    const num = String(i + 1).padStart(2, '0');
+    const safeName = student.nama.replace(/[^a-zA-Z0-9]/g, '_');
+    const nisn = student.nisn || '0000000000';
+
+    if (sideOption === 'front' || sideOption === 'both') {
+      currentStep++;
+      if (onProgress) {
+        onProgress(currentStep, totalSteps, `${student.nama} (Depan - ${resConfig.badge})`);
+      }
+      const frontBlob = await renderCardToBlob(student, settings, 'front', resolution);
+      if (frontBlob) {
+        folder?.file(`${num}_${nisn}_${safeName}_Depan_${dpiTag}.png`, frontBlob);
+      }
+    }
+
+    if (sideOption === 'back' || sideOption === 'both') {
+      currentStep++;
+      if (onProgress) {
+        onProgress(currentStep, totalSteps, `${student.nama} (Belakang - ${resConfig.badge})`);
+      }
+      const backBlob = await renderCardToBlob(student, settings, 'back', resolution);
+      if (backBlob) {
+        folder?.file(`${num}_${nisn}_${safeName}_Belakang_${dpiTag}.png`, backBlob);
+      }
+    }
+  }
+
+  const zipContent = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(zipContent);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Kartu_Pelajar_Kelas_${cleanClass}_SMAN1_Julok_${sideOption}_${dpiTag}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

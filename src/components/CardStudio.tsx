@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Palette,
   Layout,
@@ -15,10 +15,21 @@ import {
   Copy,
   ExternalLink,
   QrCode,
+  FolderArchive,
+  Grid,
+  CreditCard,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  CheckCircle2,
+  Loader2,
+  X,
+  Users,
 } from 'lucide-react';
-import { CardSettings, CardTemplateStyle, CardThemePreset, Student } from '../types';
+import { CardSettings, CardTemplateStyle, CardThemePreset, Student, ClassInfo } from '../types';
 import { StudentCard } from './StudentCard';
 import { buildStudentVerificationUrl } from '../utils/barcodeGenerator';
+import { downloadClassCardsAsZip, CardResolution, RESOLUTION_OPTIONS } from '../utils/cardExporter';
 import {
   THEME_PRESETS,
   SMAN1_JULOK_LOGO_PATH,
@@ -31,9 +42,11 @@ interface CardStudioProps {
   settings: CardSettings;
   onUpdateSettings: (settings: CardSettings) => void;
   students: Student[];
+  classes?: ClassInfo[];
+  initialClass?: string;
   selectedStudentId: string;
   onSelectStudentId: (id: string) => void;
-  onExportSingleCard: (student: Student, side: 'front' | 'back' | 'both') => void;
+  onExportSingleCard: (student: Student, side: 'front' | 'back' | 'both', resolution?: CardResolution) => void;
   onOpenVerification?: (student: Student) => void;
 }
 
@@ -41,6 +54,8 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   settings,
   onUpdateSettings,
   students,
+  classes = [],
+  initialClass,
   selectedStudentId,
   onSelectStudentId,
   onExportSingleCard,
@@ -51,7 +66,118 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   const [isFlipping, setIsFlipping] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const currentStudent = students.find((s) => s.id === selectedStudentId) || students[0];
+  // Per-class Preview & Mode State
+  const [selectedClass, setSelectedClass] = useState<string>(initialClass || 'all');
+  const [previewMode, setPreviewMode] = useState<'single' | 'gallery'>('single');
+
+  React.useEffect(() => {
+    if (initialClass !== undefined) {
+      setSelectedClass(initialClass);
+    }
+  }, [initialClass]);
+
+  // Export Resolution State (from medium to maximum: 150 DPI to 600 DPI)
+  const [exportResolution, setExportResolution] = useState<CardResolution>('high');
+
+  // Mass Download Per Class State
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [massDownloadClass, setMassDownloadClass] = useState<string>('all');
+  const [massDownloadSide, setMassDownloadSide] = useState<'front' | 'back' | 'both'>('both');
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState<{ current: number; total: number; label: string } | null>(null);
+  const [massDownloadSuccess, setMassDownloadSuccess] = useState('');
+
+  // Active resolution metadata
+  const activeResConfig = useMemo(() => {
+    return RESOLUTION_OPTIONS.find((r) => r.id === exportResolution) || RESOLUTION_OPTIONS[1];
+  }, [exportResolution]);
+
+  // Extract unique classes from registered classes and students
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    classes.forEach((c) => {
+      if (c.nama && c.nama.trim()) classSet.add(c.nama.trim());
+    });
+    students.forEach((s) => {
+      if (s.kelas && s.kelas.trim()) {
+        classSet.add(s.kelas.trim());
+      }
+    });
+    return Array.from(classSet).sort();
+  }, [students, classes]);
+
+  // Filter students based on selected class
+  const classFilteredStudents = useMemo(() => {
+    if (selectedClass === 'all') return students;
+    return students.filter((s) => (s.kelas || '').trim() === selectedClass);
+  }, [students, selectedClass]);
+
+  // Synchronize active student when class filter changes
+  useEffect(() => {
+    if (classFilteredStudents.length > 0 && !classFilteredStudents.some((s) => s.id === selectedStudentId)) {
+      onSelectStudentId(classFilteredStudents[0].id);
+    }
+  }, [classFilteredStudents, selectedStudentId, onSelectStudentId]);
+
+  const currentStudent = classFilteredStudents.find((s) => s.id === selectedStudentId) || classFilteredStudents[0] || students[0];
+
+  const currentStudentIndex = classFilteredStudents.findIndex((s) => s.id === currentStudent?.id);
+
+  const handlePrevStudent = () => {
+    if (currentStudentIndex > 0) {
+      onSelectStudentId(classFilteredStudents[currentStudentIndex - 1].id);
+    }
+  };
+
+  const handleNextStudent = () => {
+    if (currentStudentIndex >= 0 && currentStudentIndex < classFilteredStudents.length - 1) {
+      onSelectStudentId(classFilteredStudents[currentStudentIndex + 1].id);
+    }
+  };
+
+  const handleOpenMassDownload = (targetClass?: string) => {
+    const cls = targetClass || (selectedClass !== 'all' ? selectedClass : (availableClasses[0] || 'all'));
+    setMassDownloadClass(cls);
+    setMassDownloadSide('both');
+    setMassDownloadSuccess('');
+    setZipProgress(null);
+    setIsDownloadModalOpen(true);
+  };
+
+  const handleExecuteMassDownload = async () => {
+    const targetStudents = massDownloadClass === 'all'
+      ? students
+      : students.filter((s) => (s.kelas || '').trim() === massDownloadClass);
+
+    if (targetStudents.length === 0) return;
+
+    setIsGeneratingZip(true);
+    setMassDownloadSuccess('');
+    try {
+      await downloadClassCardsAsZip(
+        targetStudents,
+        massDownloadClass === 'all' ? 'Semua_Siswa' : massDownloadClass,
+        settings,
+        massDownloadSide,
+        exportResolution,
+        (current, total, label) => {
+          setZipProgress({ current, total, label });
+        }
+      );
+      const resConfig = RESOLUTION_OPTIONS.find((r) => r.id === exportResolution) || RESOLUTION_OPTIONS[1];
+      setMassDownloadSuccess(`Berhasil mengunduh berkas ZIP gambar (${resConfig.badge}) untuk ${targetStudents.length} siswa!`);
+      setTimeout(() => {
+        setIsDownloadModalOpen(false);
+        setIsGeneratingZip(false);
+        setZipProgress(null);
+        setMassDownloadSuccess('');
+      }, 1500);
+    } catch (err: any) {
+      console.error('Mass download error:', err);
+      alert(`Gagal membuat berkas ZIP gambar: ${err.message || 'Terjadi kesalahan'}`);
+      setIsGeneratingZip(false);
+    }
+  };
 
   const handleFlip = () => {
     setIsFlipping(true);
@@ -115,90 +241,325 @@ export const CardStudio: React.FC<CardStudioProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* Left Column: Live Card Preview Studio (5 Cols) */}
-      <div className="lg:col-span-5 flex flex-col items-center">
-        <div className="w-full bg-slate-900/5 border border-slate-200/80 rounded-2xl p-4 sm:p-6 flex flex-col items-center shadow-xs">
-          {/* Top Controls: Student picker & Flip toggle */}
-          <div className="w-full flex items-center justify-between gap-2 mb-4">
-            <div className="flex-1 min-w-0">
-              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">
-                Siswa Pratinjau
-              </label>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => onSelectStudentId(e.target.value)}
-                className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 truncate"
-              >
-                {students.map((std) => (
-                  <option key={std.id} value={std.id}>
-                    {std.nama} (NIS: {std.nis} • {std.kelas})
-                  </option>
-                ))}
-              </select>
+    <div className="space-y-5">
+      {/* 1. Bilah Kontrol Pratinjau Per Kelas & Opsi Download Massal Gambar */}
+      <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Left: Class Filter Selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+              <Filter className="w-4 h-4" />
             </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Pratinjau Per Kelas
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                  {classFilteredStudents.length} Siswa
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[200px]"
+                >
+                  <option value="all">Semua Kelas ({students.length} Siswa)</option>
+                  {availableClasses.map((cls) => {
+                    const count = students.filter((s) => (s.kelas || '').trim() === cls).length;
+                    return (
+                      <option key={cls} value={cls}>
+                        Kelas {cls} ({count} Siswa)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Mode Switcher & Mass Download Button */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Mode Switcher */}
+          <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <button
+              onClick={() => setPreviewMode('single')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                previewMode === 'single'
+                  ? 'bg-white text-blue-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Fokus Kartu</span>
+            </button>
 
             <button
-              onClick={handleFlip}
-              className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+              onClick={() => setPreviewMode('gallery')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                previewMode === 'gallery'
+                  ? 'bg-white text-blue-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>{cardSide === 'front' ? 'Lihat Belakang' : 'Lihat Depan'}</span>
+              <Grid className="w-3.5 h-3.5" />
+              <span>Galeri Kelas ({classFilteredStudents.length})</span>
             </button>
           </div>
 
-          {/* Interactive Card Canvas with 3D Flip transition - Direct Full Preview */}
-          <div className="relative py-3 sm:py-5 flex items-center justify-center w-full overflow-hidden">
-            <div
-              className={`w-full max-w-[520px] flex items-center justify-center transition-transform duration-200 ease-in-out ${
-                isFlipping ? 'scale-90 opacity-70 rotate-y-90' : 'scale-100 opacity-100'
-              }`}
-            >
-              {currentStudent && (
-                <StudentCard
-                  student={currentStudent}
-                  settings={settings}
-                  side={cardSide}
-                  autoFit={true}
-                  onOpenVerification={onOpenVerification}
-                />
-              )}
+          {/* Opsi Download Massal Per Kelas */}
+          <button
+            onClick={() => handleOpenMassDownload(selectedClass)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Download seluruh kartu siswa kelas ini dalam format file gambar PNG (berkas ZIP 300 DPI)"
+          >
+            <FolderArchive className="w-4 h-4 text-emerald-100" />
+            <span>Download Massal Gambar ({selectedClass === 'all' ? 'Semua' : `Kelas ${selectedClass}`})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Main Studio View: Galeri Kelas vs Mode Fokus Editor */}
+      {previewMode === 'gallery' ? (
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
+          {/* Gallery Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 text-xs font-extrabold uppercase tracking-wider">
+                  {selectedClass === 'all' ? 'Semua Kelas' : `Kelas ${selectedClass}`}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {classFilteredStudents.length} Siswa Terdaftar
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-slate-900 mt-1">
+                Galeri Pratinjau Seluruh Kartu Siswa Kelas {selectedClass === 'all' ? 'Semua' : selectedClass}
+              </h3>
+              <p className="text-xs text-slate-500">
+                Pratinjau visual seluruh kartu siswa dalam kelas ini. Anda dapat mengunduh satuan maupun massal dalam format gambar PNG 300 DPI.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleFlip}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Tampilkan {cardSide === 'front' ? 'Belakang Semua' : 'Depan Semua'}</span>
+              </button>
+
+              <button
+                onClick={() => handleOpenMassDownload(selectedClass)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                <FolderArchive className="w-4 h-4" />
+                <span>Download Massal Gambar ZIP</span>
+              </button>
+
+              <button
+                onClick={() => setPreviewMode('single')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Kembali ke Fokus</span>
+              </button>
             </div>
           </div>
 
-          {/* Bottom Action Bar (Zoom/Persen dihilangkan, kartu otomatis fit penuh) */}
-          <div className="w-full pt-3 mt-1 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-            {/* Indikator Tampilan Penuh Otomatis */}
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Tampilan Penuh Otomatis (CR-80 ISO)
-              </span>
-            </div>
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {classFilteredStudents.map((std, idx) => (
+              <div
+                key={std.id}
+                className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 flex flex-col items-center hover:border-blue-400 hover:shadow-md transition-all group"
+              >
+                {/* Header card */}
+                <div className="w-full flex items-center justify-between text-xs pb-2 mb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="font-bold text-slate-800 truncate" title={std.nama}>
+                      {std.nama}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                    {std.nisn}
+                  </span>
+                </div>
 
-            {/* Quick Export & Flip Buttons */}
-            {currentStudent && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFlip}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                  title="Balik ke sisi depan atau belakang kartu"
-                >
-                  <RotateCw className="w-3.5 h-3.5" />
-                  <span>Lihat {cardSide === 'front' ? 'Belakang' : 'Depan'}</span>
-                </button>
+                {/* Card preview */}
+                <div className="w-full flex items-center justify-center py-1">
+                  <StudentCard
+                    student={std}
+                    settings={settings}
+                    side={cardSide}
+                    autoFit={true}
+                    onOpenVerification={onOpenVerification}
+                  />
+                </div>
 
-                <button
-                  onClick={() => onExportSingleCard(currentStudent, cardSide)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh PNG ({cardSide === 'front' ? 'Depan' : 'Belakang'})</span>
-                </button>
+                {/* Bottom Card Actions */}
+                <div className="w-full flex items-center justify-between gap-2 pt-2.5 mt-2 border-t border-slate-200 text-[11px]">
+                  <button
+                    onClick={() => {
+                      onSelectStudentId(std.id);
+                      setPreviewMode('single');
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                  >
+                    Buka di Editor
+                  </button>
+
+                  <button
+                    onClick={() => onExportSingleCard(std, cardSide, exportResolution)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-md font-medium shadow-2xs transition-colors cursor-pointer"
+                    title={`Unduh kartu siswa ${std.nama} (${activeResConfig.badge})`}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Unduh PNG ({activeResConfig.badge})</span>
+                  </button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Live Card Preview Studio (5 Cols) */}
+          <div className="lg:col-span-5 flex flex-col items-center">
+            <div className="w-full bg-slate-900/5 border border-slate-200/80 rounded-2xl p-4 sm:p-6 flex flex-col items-center shadow-xs">
+              {/* Top Controls: Student picker & Flip toggle */}
+              <div className="w-full flex items-center justify-between gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
+                      Siswa ({selectedClass === 'all' ? 'Semua Kelas' : `Kelas ${selectedClass}`})
+                    </label>
+                  </div>
+                  <select
+                    value={selectedStudentId}
+                    onChange={(e) => onSelectStudentId(e.target.value)}
+                    className="w-full text-xs font-medium bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 truncate"
+                  >
+                    {classFilteredStudents.map((std) => (
+                      <option key={std.id} value={std.id}>
+                        {std.nama} (NIS: {std.nis} • {std.kelas})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleFlip}
+                  className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-xs transition-all cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>{cardSide === 'front' ? 'Lihat Belakang' : 'Lihat Depan'}</span>
+                </button>
+              </div>
+
+              {/* Quick Prev / Next Navigator within class */}
+              <div className="w-full flex items-center justify-between gap-2 mb-3 px-1 pt-1 border-t border-slate-200/60">
+                <button
+                  onClick={handlePrevStudent}
+                  disabled={currentStudentIndex <= 0}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-semibold transition-colors cursor-pointer"
+                  title="Siswa Sebelumnya dalam kelas ini"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Sebelumnya</span>
+                </button>
+
+                <span className="text-[11px] font-bold text-slate-500">
+                  Siswa {currentStudentIndex + 1} dari {classFilteredStudents.length}
+                </span>
+
+                <button
+                  onClick={handleNextStudent}
+                  disabled={currentStudentIndex >= classFilteredStudents.length - 1}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-semibold transition-colors cursor-pointer"
+                  title="Siswa Berikutnya dalam kelas ini"
+                >
+                  <span>Berikutnya</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Interactive Card Canvas with 3D Flip transition - Direct Full Preview */}
+              <div className="relative py-3 sm:py-5 flex items-center justify-center w-full overflow-hidden">
+                <div
+                  className={`w-full max-w-[520px] flex items-center justify-center transition-transform duration-200 ease-in-out ${
+                    isFlipping ? 'scale-90 opacity-70 rotate-y-90' : 'scale-100 opacity-100'
+                  }`}
+                >
+                  {currentStudent && (
+                    <StudentCard
+                      student={currentStudent}
+                      settings={settings}
+                      side={cardSide}
+                      autoFit={true}
+                      onOpenVerification={onOpenVerification}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom Action Bar */}
+              <div className="w-full pt-3 mt-1 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                {/* Indikator Tampilan Penuh Otomatis */}
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    CR-80 ISO (Pas Penuh)
+                  </span>
+                </div>
+
+                {/* Quick Export & Flip & Mass Download Buttons */}
+                {currentStudent && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Resolution Selector Dropdown */}
+                    <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Resolusi:</span>
+                      <select
+                        value={exportResolution}
+                        onChange={(e) => setExportResolution(e.target.value as CardResolution)}
+                        className="text-[11px] font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                        title="Pilih resolusi gambar untuk unduhan kartu"
+                      >
+                        {RESOLUTION_OPTIONS.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.badge} ({r.name.split(' (')[0]})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() => onExportSingleCard(currentStudent, cardSide, exportResolution)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                      title={`Unduh kartu siswa ini sebagai gambar PNG ${activeResConfig.badge} (${settings.orientation === 'landscape' ? activeResConfig.dimLandscape : activeResConfig.dimPortrait})`}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Unduh PNG ({cardSide === 'front' ? 'Depan' : 'Belakang'})</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenMassDownload(selectedClass)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer"
+                      title="Download seluruh kartu siswa kelas ini sekaligus dalam berkas ZIP gambar PNG"
+                    >
+                      <FolderArchive className="w-3.5 h-3.5" />
+                      <span>Download Massal ({selectedClass === 'all' ? 'Semua' : selectedClass})</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
 
         {/* Digital Verification Link & Authenticity Test Box */}
         {currentStudent && (
@@ -1167,5 +1528,261 @@ export const CardStudio: React.FC<CardStudioProps> = ({
         )}
       </div>
     </div>
-  );
+  )}
+
+    {/* Modal Download Massal Gambar Per Kelas (PNG ZIP 300 DPI) */}
+    {isDownloadModalOpen && (
+      <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl flex flex-col space-y-4">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                <FolderArchive className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Download Massal Gambar Kartu Pelajar
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Unduh file kartu per kelas dalam format gambar PNG (resolusi cetak 300 DPI)
+                </p>
+              </div>
+            </div>
+            {!isGeneratingZip && (
+              <button
+                onClick={() => setIsDownloadModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Modal Form */}
+          <div className="space-y-4 text-xs">
+            {/* Target Class Picker */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                Pilih Kelas yang Akan Diunduh
+              </label>
+              <select
+                value={massDownloadClass}
+                onChange={(e) => setMassDownloadClass(e.target.value)}
+                disabled={isGeneratingZip}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="all">Semua Kelas ({students.length} Siswa)</option>
+                {availableClasses.map((cls) => {
+                  const count = students.filter((s) => (s.kelas || '').trim() === cls).length;
+                  return (
+                    <option key={cls} value={cls}>
+                      Kelas {cls} ({count} Siswa)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Sisi Gambar Selection */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                Pilihan Sisi Gambar
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMassDownloadSide('both')}
+                  disabled={isGeneratingZip}
+                  className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                    massDownloadSide === 'both'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold shadow-2xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-base mb-0.5">🎴</div>
+                  <div className="font-bold">Depan & Belakang</div>
+                  <div className="text-[10px] text-slate-500 font-normal mt-0.5">2 Gambar / Siswa</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMassDownloadSide('front')}
+                  disabled={isGeneratingZip}
+                  className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                    massDownloadSide === 'front'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold shadow-2xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-base mb-0.5">🖼️</div>
+                  <div className="font-bold">Depan Saja</div>
+                  <div className="text-[10px] text-slate-500 font-normal mt-0.5">1 Gambar / Siswa</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMassDownloadSide('back')}
+                  disabled={isGeneratingZip}
+                  className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                    massDownloadSide === 'back'
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-bold shadow-2xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="text-base mb-0.5">📝</div>
+                  <div className="font-bold">Belakang Saja</div>
+                  <div className="text-[10px] text-slate-500 font-normal mt-0.5">1 Gambar / Siswa</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Pilihan Resolusi Gambar (Dari Sedang ke Maksimal) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  Pilihan Resolusi Gambar
+                </label>
+                <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                  Sedang → Maksimal
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {RESOLUTION_OPTIONS.map((res) => {
+                  const isSelected = exportResolution === res.id;
+                  return (
+                    <button
+                      key={res.id}
+                      type="button"
+                      onClick={() => setExportResolution(res.id)}
+                      disabled={isGeneratingZip}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer relative ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/80 text-blue-950 font-bold ring-1 ring-blue-500 shadow-2xs'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span
+                          className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          {res.badge}
+                        </span>
+                        {res.id === 'high' && (
+                          <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
+                            Standar
+                          </span>
+                        )}
+                        {res.id === 'max' && (
+                          <span className="text-[9px] font-semibold text-purple-700 bg-purple-50 px-1 py-0.2 rounded border border-purple-200">
+                            Puncak
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-bold truncate">{res.name.split(' (')[0]}</div>
+                      <div className="text-[10px] font-mono text-slate-500 mt-0.5">
+                        {settings.orientation === 'landscape' ? res.dimLandscape : res.dimPortrait}
+                      </div>
+                      <div className="text-[9.5px] text-slate-400 mt-0.5">
+                        {res.fileSizeApprox} / kartu
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Export Summary Box */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="text-[11px] font-bold text-slate-800 block">
+                  Resolusi: {activeResConfig.name} ({activeResConfig.badge})
+                </span>
+                <span className="text-[10.5px] text-slate-500 block">
+                  Dimensi: {settings.orientation === 'landscape' ? activeResConfig.dimLandscape : activeResConfig.dimPortrait} • {activeResConfig.desc}
+                </span>
+              </div>
+              <div className="text-left sm:text-right flex-shrink-0">
+                <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg inline-block">
+                  {massDownloadSide === 'both'
+                    ? (massDownloadClass === 'all'
+                        ? students.length
+                        : students.filter((s) => (s.kelas || '').trim() === massDownloadClass).length) * 2
+                    : (massDownloadClass === 'all'
+                        ? students.length
+                        : students.filter((s) => (s.kelas || '').trim() === massDownloadClass).length)}{' '}
+                  Gambar PNG ({activeResConfig.badge})
+                </span>
+              </div>
+            </div>
+
+            {/* Progress Indicator */}
+            {isGeneratingZip && zipProgress && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    Mengemas Gambar Kartu...
+                  </span>
+                  <span>
+                    {zipProgress.current} / {zipProgress.total} ({Math.round((zipProgress.current / zipProgress.total) * 100)}%)
+                  </span>
+                </div>
+                <div className="w-full bg-emerald-200 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-full transition-all duration-150 rounded-full"
+                    style={{ width: `${(zipProgress.current / zipProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[10.5px] text-emerald-700 truncate">
+                  Memproses: {zipProgress.label}
+                </p>
+              </div>
+            )}
+
+            {massDownloadSuccess && (
+              <div className="p-3 bg-emerald-100/70 border border-emerald-300 rounded-xl text-emerald-900 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <span>{massDownloadSuccess}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Modal Actions */}
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsDownloadModalOpen(false)}
+              disabled={isGeneratingZip}
+              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer disabled:opacity-50"
+            >
+              Tutup
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExecuteMassDownload}
+              disabled={isGeneratingZip}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              {isGeneratingZip ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Sedang Mengemas ZIP...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Unduh Berkas ZIP Gambar</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
 };

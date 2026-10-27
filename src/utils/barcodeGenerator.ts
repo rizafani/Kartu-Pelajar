@@ -4,12 +4,12 @@ import { Student, CardSettings } from '../types';
 /**
  * Generate high quality QR code data URL
  */
-export async function generateQrDataUrl(text: string, color = '#0f172a'): Promise<string> {
+export async function generateQrDataUrl(text: string, color = '#0f172a', width = 512): Promise<string> {
   try {
     return await QRCode.toDataURL(text, {
       errorCorrectionLevel: 'M',
       margin: 1,
-      width: 256,
+      width: width,
       color: {
         dark: color,
         light: '#ffffff',

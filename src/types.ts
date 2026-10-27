@@ -14,6 +14,20 @@ export interface Student {
   masaBerlaku: string; // e.g. "Selama Menjadi Siswa" or "2027-06-30"
 }
 
+export interface ClassInfo {
+  id: string;
+  nama: string; // e.g. "X-1", "XI MIPA 1"
+  tingkat: 'X' | 'XI' | 'XII' | 'Lainnya';
+  fase?: string; // e.g. "Fase E (Umum)", "Fase F"
+  jurusan?: string; // e.g. "Umum", "MIPA", "IPS"
+  waliKelas?: string;
+  nipWaliKelas?: string;
+  tahunAjaran?: string; // e.g. "2024/2025"
+  ruangan?: string;
+  keterangan?: string;
+  createdAt?: string;
+}
+
 export type CardOrientation = 'landscape' | 'portrait';
 
 export type CardThemePreset = 

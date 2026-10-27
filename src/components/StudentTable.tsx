@@ -20,11 +20,13 @@ import {
   Save,
   ShieldCheck,
 } from 'lucide-react';
-import { Student } from '../types';
+import { Student, ClassInfo } from '../types';
 import { StudentPhotoChoiceModal } from './StudentPhotoChoiceModal';
 
 interface StudentTableProps {
   students: Student[];
+  classes?: ClassInfo[];
+  initialClassFilter?: string;
   onAddStudent: (student: Student) => void;
   onUpdateStudent: (student: Student) => void;
   onDeleteStudent: (id: string) => void;
@@ -38,10 +40,13 @@ interface StudentTableProps {
   onOpenImportModal?: () => void;
   onTriggerPrint: (mode?: 'selected' | 'all') => void;
   onOpenVerification?: (student: Student) => void;
+  onNavigateToClasses?: () => void;
 }
 
 export const StudentTable: React.FC<StudentTableProps> = ({
   students,
+  classes = [],
+  initialClassFilter,
   onAddStudent,
   onUpdateStudent,
   onDeleteStudent,
@@ -55,11 +60,18 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   onOpenImportModal,
   onTriggerPrint,
   onOpenVerification,
+  onNavigateToClasses,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [classFilter, setClassFilter] = useState('all');
+  const [classFilter, setClassFilter] = useState(initialClassFilter || 'all');
   const [genderFilter, setGenderFilter] = useState<'all' | 'L' | 'P'>('all');
   const [photoFilter, setPhotoFilter] = useState<'all' | 'with' | 'without'>('all');
+
+  React.useEffect(() => {
+    if (initialClassFilter !== undefined) {
+      setClassFilter(initialClassFilter);
+    }
+  }, [initialClassFilter]);
 
   // Edit / Add Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,14 +85,17 @@ export const StudentTable: React.FC<StudentTableProps> = ({
   // Photo Choice Modal state (Upload File Manual vs Camera Webcam)
   const [photoChoiceStudent, setPhotoChoiceStudent] = useState<Student | null>(null);
 
-  // Available classes list from current data
+  // Available classes list from registered classes and current student data
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
+    classes.forEach((c) => {
+      if (c.nama && c.nama.trim()) set.add(c.nama.trim());
+    });
     students.forEach((s) => {
-      if (s.kelas) set.add(s.kelas);
+      if (s.kelas && s.kelas.trim()) set.add(s.kelas.trim());
     });
     return Array.from(set).sort();
-  }, [students]);
+  }, [students, classes]);
 
   // Filtered students
   const filteredStudents = useMemo(() => {
@@ -706,13 +721,19 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                   </label>
                   <input
                     type="text"
+                    list="classes-datalist"
                     value={editingStudent.kelas}
                     onChange={(e) =>
                       setEditingStudent({ ...editingStudent, kelas: e.target.value })
                     }
                     placeholder="Contoh: X-1, XI MIPA 1"
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2"
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-semibold"
                   />
+                  <datalist id="classes-datalist">
+                    {availableClasses.map((cls) => (
+                      <option key={cls} value={cls} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>

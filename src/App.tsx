@@ -23,26 +23,29 @@ import {
   LogIn,
   LogOut,
   ShieldCheck,
+  GraduationCap,
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { CardSettings, PrintSettings, Student } from './types';
+import { CardSettings, PrintSettings, Student, ClassInfo } from './types';
 import {
   DEFAULT_CARD_SETTINGS,
   DEFAULT_PRINT_SETTINGS,
   INITIAL_STUDENTS,
+  INITIAL_CLASSES,
   SMAN1_JULOK_LOGO_PATH,
   ACEH_GOV_LOGO_PATH,
 } from './data/defaults';
 import { CardStudio } from './components/CardStudio';
 import { StudentTable } from './components/StudentTable';
+import { ClassManagement } from './components/ClassManagement';
 import { ImportExportModal } from './components/ImportExportModal';
 import { ZipPhotoModal } from './components/ZipPhotoModal';
 import { BatchPrintView } from './components/BatchPrintView';
 import { SingleCardModal } from './components/SingleCardModal';
 import { WebcamModal } from './components/WebcamModal';
 import { CardVerificationView } from './components/CardVerificationView';
-import { downloadCardAsPng } from './utils/cardExporter';
+import { downloadCardAsPng, CardResolution, RESOLUTION_OPTIONS } from './utils/cardExporter';
 import { decodeVerificationPayload } from './utils/barcodeGenerator';
 import {
   auth,
@@ -56,12 +59,17 @@ import {
   batchSaveStudentsToFirestore,
   saveSettingsToFirestore,
   loadSettingsFromFirestore,
+  saveClassToFirestore,
+  deleteClassFromFirestore,
+  batchSaveClassesToFirestore,
+  loadClassesFromFirestore,
   handleFirestoreError,
   OperationType,
 } from './firebase';
 
 const STORAGE_KEY_STUDENTS = 'sman1_julok_students_v2';
 const STORAGE_KEY_SETTINGS = 'sman1_julok_settings_v2';
+const STORAGE_KEY_CLASSES = 'sman1_julok_classes_v2';
 
 export default function App() {
   // Authentication & Cloud Database State
@@ -112,10 +120,68 @@ export default function App() {
     return DEFAULT_CARD_SETTINGS;
   });
 
+  // Classes state with LocalStorage persistence and defaults
+  const [classes, setClasses] = useState<ClassInfo[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CLASSES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed reading classes from storage', e);
+    }
+    return INITIAL_CLASSES;
+  });
+
+  // Save classes to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CLASSES, JSON.stringify(classes));
+    } catch (e) {
+      console.error('Failed saving classes to storage', e);
+    }
+  }, [classes]);
+
+  // Auto-discover classes from students
+  useEffect(() => {
+    if (students.length === 0) return;
+    const existingClassNames = new Set(classes.map((c) => c.nama.trim()));
+    const missingClasses: ClassInfo[] = [];
+
+    students.forEach((s) => {
+      const clsName = (s.kelas || '').trim();
+      if (clsName && !existingClassNames.has(clsName) && !missingClasses.some((m) => m.nama === clsName)) {
+        let tingkat: 'X' | 'XI' | 'XII' | 'Lainnya' = 'Lainnya';
+        if (clsName.startsWith('X-') || clsName.startsWith('X ')) tingkat = 'X';
+        else if (clsName.startsWith('XI-') || clsName.startsWith('XI ')) tingkat = 'XI';
+        else if (clsName.startsWith('XII-') || clsName.startsWith('XII ')) tingkat = 'XII';
+
+        missingClasses.push({
+          id: `cls-auto-${Date.now()}-${clsName.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          nama: clsName,
+          tingkat,
+          fase: tingkat === 'X' ? 'Fase E (Umum)' : tingkat === 'XI' || tingkat === 'XII' ? 'Fase F' : 'Umum',
+          jurusan: s.jurusan || 'Umum',
+          tahunAjaran: '2024/2025',
+          keterangan: 'Terdaftar otomatis dari data siswa',
+        });
+      }
+    });
+
+    if (missingClasses.length > 0) {
+      setClasses((prev) => [...prev, ...missingClasses]);
+    }
+  }, [students, classes]);
+
   const [printSettings, setPrintSettings] = useState<PrintSettings>(DEFAULT_PRINT_SETTINGS);
 
-  // Active view tab: 'studio' (Designer) vs 'students' (Database Roster)
-  const [activeTab, setActiveTab] = useState<'studio' | 'students'>('studio');
+  // Active view tab: 'studio' (Designer) vs 'students' (Database Roster) vs 'classes' (Manajemen Kelas)
+  const [activeTab, setActiveTab] = useState<'studio' | 'students' | 'classes'>('studio');
+
+  // Inter-tab filter navigation states
+  const [focusedClassForStudio, setFocusedClassForStudio] = useState<string>('all');
+  const [focusedClassForStudents, setFocusedClassForStudents] = useState<string>('all');
 
   // Selected students for batch print
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -416,15 +482,17 @@ export default function App() {
 
   const handleExportSingleCard = async (
     student: Student,
-    side: 'front' | 'back' | 'both'
+    side: 'front' | 'back' | 'both',
+    resolution: CardResolution = 'high'
   ) => {
     if (side === 'both') {
-      await downloadCardAsPng(student, cardSettings, 'front');
-      await downloadCardAsPng(student, cardSettings, 'back');
+      await downloadCardAsPng(student, cardSettings, 'front', resolution);
+      await downloadCardAsPng(student, cardSettings, 'back', resolution);
     } else {
-      await downloadCardAsPng(student, cardSettings, side);
+      await downloadCardAsPng(student, cardSettings, side, resolution);
     }
-    showToast(`Gambar kartu ${student.nama} berhasil diunduh.`);
+    const resConfig = RESOLUTION_OPTIONS.find((r) => r.id === resolution) || RESOLUTION_OPTIONS[1];
+    showToast(`Gambar kartu ${student.nama} (${resConfig.badge}) berhasil diunduh.`);
   };
 
   // Students to display in batch print

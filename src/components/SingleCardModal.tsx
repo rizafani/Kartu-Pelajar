@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, RotateCw, Download, Printer, ShieldCheck } from 'lucide-react';
 import { CardSettings, Student } from '../types';
 import { StudentCard } from './StudentCard';
+import { CardResolution, RESOLUTION_OPTIONS } from '../utils/cardExporter';
 
 interface SingleCardModalProps {
   isOpen: boolean;
@@ -9,7 +10,7 @@ interface SingleCardModalProps {
   settings: CardSettings;
   onClose: () => void;
   onPrintSingle: (student: Student) => void;
-  onExportSingleCard: (student: Student, side: 'front' | 'back' | 'both') => void;
+  onExportSingleCard: (student: Student, side: 'front' | 'back' | 'both', resolution?: CardResolution) => void;
   onOpenVerification?: (student: Student) => void;
 }
 
@@ -23,6 +24,7 @@ export const SingleCardModal: React.FC<SingleCardModalProps> = ({
   onOpenVerification,
 }) => {
   const [side, setSide] = useState<'front' | 'back'>('front');
+  const [resolution, setResolution] = useState<CardResolution>('high');
 
   if (!isOpen || !student) return null;
 
@@ -85,9 +87,23 @@ export const SingleCardModal: React.FC<SingleCardModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Resolution picker */}
+            <select
+              value={resolution}
+              onChange={(e) => setResolution(e.target.value as CardResolution)}
+              className="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              title="Pilih Resolusi Gambar"
+            >
+              {RESOLUTION_OPTIONS.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.badge} ({r.name.split(' (')[0]})
+                </option>
+              ))}
+            </select>
+
             <button
-              onClick={() => onExportSingleCard(student, side)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl cursor-pointer transition-colors"
+              onClick={() => onExportSingleCard(student, side, resolution)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl cursor-pointer transition-colors shadow-2xs"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Unduh PNG</span>
