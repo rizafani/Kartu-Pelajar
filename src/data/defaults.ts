@@ -211,7 +211,7 @@ export const DEFAULT_CARD_SETTINGS: CardSettings = {
   orientation: 'landscape',
   themePreset: 'royal_navy',
   templateStyle: 'resmi_kedinasan',
-  cardTitle: 'KARTU TANDA PELAJAR',
+  cardTitle: 'KARTU PELAJAR',
   
   // School details (Exact values from user's image)
   provinsiText: 'PEMERINTAH ACEH',

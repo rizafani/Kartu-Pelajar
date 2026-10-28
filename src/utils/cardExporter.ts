@@ -140,55 +140,63 @@ export async function renderCardToBlob(
       nisnColor = '#38bdf8';
     }
 
-      // 1. Kop Surat Kedinasan: Kiri Logo Sekolah, Kanan Logo Pemerintah Aceh
+      // 1. Kop Surat Kedinasan: Kiri Logo Sekolah (diturunkan agar tampil penuh tidak terpotong), Kanan Logo Pemerintah Aceh
       if (settings.schoolLogo) {
         const sLogo = await loadImage(settings.schoolLogo);
-        if (sLogo) ctx.drawImage(sLogo, 40, 16, 92, 92);
+        if (sLogo) ctx.drawImage(sLogo, 42, 24, 86, 86);
       }
       if (settings.showPancasila && settings.pancasilaLogo) {
         const pImg = await loadImage(settings.pancasilaLogo);
-        if (pImg) ctx.drawImage(pImg, width - 120, 16, 76, 92);
+        if (pImg) ctx.drawImage(pImg, width - 120, 24, 74, 86);
       }
 
       // Center Official Kop Text
       ctx.textAlign = 'center';
       ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 17px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(settings.provinsiText || 'PEMERINTAH ACEH', width / 2 + 10, 34);
-
       ctx.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(settings.dinasText || 'DINAS PENDIDIKAN', width / 2 + 10, 56);
+      ctx.fillText(settings.provinsiText || 'PEMERINTAH ACEH', width / 2, 28);
+
+      ctx.font = 'bold 14.5px "Plus Jakarta Sans", sans-serif';
+      ctx.fillText(settings.dinasText || 'DINAS PENDIDIKAN', width / 2, 46);
 
       ctx.fillStyle = primaryNavy;
-      ctx.font = '900 30px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(settings.schoolName || 'SMA NEGERI 1 JULOK', width / 2 + 10, 87);
+      ctx.font = '900 27px "Plus Jakarta Sans", sans-serif';
+      ctx.fillText(settings.schoolName || 'SMA NEGERI 1 JULOK', width / 2, 73);
 
       ctx.fillStyle = '#475569';
-      ctx.font = '600 14px "Plus Jakarta Sans", sans-serif';
+      ctx.font = '600 12.5px "Plus Jakarta Sans", sans-serif';
       ctx.fillText(
-        `${settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'}  •  NPSN: ${settings.npsn || '10101877'}`,
-        width / 2 + 10,
+        `${settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur'}  •  NPSN: ${settings.npsn || '10101877'}`,
+        width / 2,
+        91
+      );
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 11.5px "Plus Jakarta Sans", sans-serif';
+      ctx.fillText(
+        `website : ${settings.website || 'sman1julok.sch.id'}, Email : ${settings.email || 'info@sman1julok.sch.id'}`,
+        width / 2,
         107
       );
 
       // Official Double Rule Separator
       ctx.fillStyle = primaryNavy;
-      ctx.fillRect(35, 116, width - 70, 5);
-      ctx.fillRect(35, 124, width - 70, 2);
+      ctx.fillRect(35, 114, width - 70, 4);
+      ctx.fillRect(35, 121, width - 70, 1.5);
 
-      // 2. Card Title Banner
+      // 2. Card Title Banner (Tulisan Kartu Pelajar persis di tengah)
       ctx.fillStyle = bannerColor;
-      ctx.fillRect(0, 134, width, 36);
+      ctx.fillRect(0, 128, width, 38);
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 19px "Plus Jakarta Sans", sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(settings.cardTitle || 'KARTU TANDA PELAJAR', 45, 159);
+      ctx.font = '900 20px "Plus Jakarta Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(settings.cardTitle || 'KARTU PELAJAR', width / 2, 153);
 
       ctx.fillStyle = nisnColor;
-      ctx.font = 'bold 16px monospace';
+      ctx.font = 'bold 15px monospace';
       ctx.textAlign = 'right';
-      ctx.fillText(`NISN: ${student.nisn}`, width - 45, 159);
+      ctx.fillText(`NISN: ${student.nisn}`, width - 40, 153);
 
       // 3. Student Photo (Left Column - 195px x 260px)
       const photoX = 45;

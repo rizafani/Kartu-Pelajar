@@ -137,41 +137,44 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* 1. KOP SURAT KEDINASAN RESMI (Full width, balanced logos, no dead space) */}
       <div className="w-full pt-2 px-3 pb-1 bg-white/95 z-20 flex flex-col">
         <div className="flex items-center justify-between gap-2">
-          {/* Logo Kiri: Logo Sekolah (SMA Negeri 1 Julok) */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Logo Kiri: Logo Sekolah (SMA Negeri 1 Julok) - Diturunkan ke bawah agar tampil penuh tidak terpotong */}
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
             <img
               src={settings.schoolLogo}
               alt="Logo Sekolah"
-              className="h-10.5 w-10.5 object-contain drop-shadow-2xs"
+              className="h-11 w-11 object-contain drop-shadow-2xs p-0.5"
             />
           </div>
 
           {/* Kop Teks Dinas Resmi - Compact & Strong Presence */}
           <div className="flex-1 text-center px-1">
-            <h4 className="text-[8px] font-extrabold uppercase tracking-widest text-slate-700 leading-tight">
+            <h4 className="text-[7.5px] font-extrabold uppercase tracking-widest text-slate-700 leading-none">
               {settings.provinsiText || 'PEMERINTAH ACEH'}
             </h4>
-            <h5 className="text-[7.5px] font-bold uppercase tracking-wide text-slate-600 leading-tight">
+            <h5 className="text-[7px] font-bold uppercase tracking-wide text-slate-600 leading-tight mt-0.5">
               {settings.dinasText || 'DINAS PENDIDIKAN'}
             </h5>
             <h1
-              className="text-[13px] font-black uppercase tracking-tight leading-tight my-0.5"
+              className="text-[12px] font-black uppercase tracking-tight leading-none my-0.5"
               style={{ color: primaryCol }}
             >
               {settings.schoolName || 'SMA NEGERI 1 JULOK'}
             </h1>
-            <p className="text-[6.5px] text-slate-600 font-semibold leading-tight truncate max-w-[280px] mx-auto">
-              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            <p className="text-[5.8px] text-slate-600 font-semibold leading-tight truncate max-w-[280px] mx-auto">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+            <p className="text-[5.5px] text-slate-500 font-medium leading-tight truncate max-w-[280px] mx-auto mt-0.5">
+              website : {settings.website || 'sman1julok.sch.id'}, Email : {settings.email || 'info@sman1julok.sch.id'}
             </p>
           </div>
 
           {/* Logo Kanan: Logo Pemerintah Aceh */}
-          <div className="flex-shrink-0 flex items-center justify-end">
+          <div className="flex-shrink-0 flex items-center justify-end mt-1">
             {settings.showPancasila && (
               <img
                 src={settings.pancasilaLogo}
                 alt="Logo Pemerintah Aceh"
-                className="h-10.5 w-auto max-w-[44px] object-contain drop-shadow-2xs"
+                className="h-11 w-auto max-w-[44px] object-contain drop-shadow-2xs p-0.5"
               />
             )}
           </div>
@@ -184,18 +187,18 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         </div>
       </div>
 
-      {/* 2. CARD TITLE BANNER (Strong horizontal anchor) */}
+      {/* 2. CARD TITLE BANNER (Tulisan Kartu Pelajar persis di tengah) */}
       <div
-        className="w-full py-1 px-3 flex items-center justify-between text-white shadow-2xs z-20"
+        className="w-full py-1 px-3 relative flex items-center justify-center text-white shadow-2xs z-20"
         style={{
           background: `linear-gradient(90deg, ${primaryCol} 0%, ${secondaryCol} 100%)`,
         }}
       >
-        <span className="text-[9px] font-black tracking-widest uppercase flex items-center gap-1.5">
+        <span className="text-[9.5px] font-black tracking-widest uppercase flex items-center justify-center gap-1.5 text-center">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+          {settings.cardTitle || 'KARTU PELAJAR'}
         </span>
-        <span className="text-[7.5px] font-mono font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-black/25 text-amber-300">
+        <span className="absolute right-3 text-[7.5px] font-mono font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-black/25 text-amber-300">
           NISN: {student.nisn}
         </span>
       </div>
@@ -397,12 +400,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       <div className="w-full pt-1.5 px-3 pb-1 bg-gradient-to-r from-amber-600 via-amber-400 to-amber-600 shadow-xs z-20 flex flex-col">
         <div className="flex items-center justify-between gap-2">
           {/* Logo Sekolah */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
             <div className="p-0.5 rounded-full bg-white/90 shadow-2xs">
               <img
                 src={settings.schoolLogo}
                 alt="Logo Sekolah"
-                className="h-10 w-10 object-contain drop-shadow-xs"
+                className="h-10.5 w-10.5 object-contain drop-shadow-xs"
               />
             </div>
           </div>
@@ -415,22 +418,25 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             <h5 className="text-[7px] font-bold uppercase tracking-wider text-amber-900 leading-tight">
               {settings.dinasText || 'DINAS PENDIDIKAN'}
             </h5>
-            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-slate-950">
+            <h1 className="text-[12px] font-black uppercase tracking-tight leading-tight my-0.5 text-slate-950">
               {settings.schoolName || 'SMA NEGERI 1 JULOK'}
             </h1>
-            <p className="text-[6px] text-amber-950 font-bold leading-tight truncate max-w-[280px] mx-auto opacity-90">
-              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            <p className="text-[5.8px] text-amber-950 font-bold leading-tight truncate max-w-[280px] mx-auto opacity-90">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+            <p className="text-[5.5px] text-amber-950 font-semibold leading-tight truncate max-w-[280px] mx-auto mt-0.5">
+              website : {settings.website || 'sman1julok.sch.id'}, Email : {settings.email || 'info@sman1julok.sch.id'}
             </p>
           </div>
 
           {/* Logo Pemerintah Aceh / Garuda */}
-          <div className="flex-shrink-0 flex items-center justify-end">
+          <div className="flex-shrink-0 flex items-center justify-end mt-1">
             {settings.showPancasila && (
               <div className="p-0.5 rounded-full bg-white/90 shadow-2xs">
                 <img
                   src={settings.pancasilaLogo}
                   alt="Logo Pemerintah Aceh"
-                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                  className="h-10.5 w-auto max-w-[40px] object-contain drop-shadow-xs"
                 />
               </div>
             )}
@@ -444,18 +450,18 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         </div>
       </div>
 
-      {/* Sub-header Bar: Card Title */}
+      {/* Sub-header Bar: Card Title persis di tengah */}
       <div
-        className="w-full py-0.5 px-3 flex items-center justify-between text-white shadow-2xs z-20"
+        className="w-full py-0.5 px-3 relative flex items-center justify-center text-white shadow-2xs z-20"
         style={{
           background: `linear-gradient(90deg, ${primaryCol} 0%, #1e293b 100%)`,
         }}
       >
-        <span className="text-[8px] font-black uppercase tracking-widest text-amber-300 flex items-center gap-1">
+        <span className="text-[8.5px] font-black uppercase tracking-widest text-amber-300 flex items-center justify-center gap-1 text-center">
           <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+          {settings.cardTitle || 'KARTU PELAJAR'}
         </span>
-        <span className="text-[7.5px] font-mono font-black text-amber-300 tracking-wider">
+        <span className="absolute right-3 text-[7.5px] font-mono font-black text-amber-300 tracking-wider">
           NISN: {student.nisn}
         </span>
       </div>
@@ -841,12 +847,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       <div className="w-full pt-2 px-3 pb-1 bg-gradient-to-r from-red-950 via-rose-900 to-amber-950 text-white z-20 shadow-xs flex flex-col">
         <div className="flex items-center justify-between gap-2">
           {/* Logo Sekolah */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
             <div className="p-0.5 rounded-lg bg-white/95 shadow-2xs">
               <img
                 src={settings.schoolLogo}
                 alt="Logo Sekolah"
-                className="h-10 w-10 object-contain drop-shadow-xs"
+                className="h-10.5 w-10.5 object-contain drop-shadow-xs"
               />
             </div>
           </div>
@@ -859,22 +865,25 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             <h5 className="text-[7px] font-bold uppercase tracking-wider text-rose-200 leading-tight">
               {settings.dinasText || 'DINAS PENDIDIKAN'}
             </h5>
-            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
+            <h1 className="text-[12px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
               {settings.schoolName || 'SMA NEGERI 1 JULOK'}
             </h1>
-            <p className="text-[6px] text-amber-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
-              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            <p className="text-[5.8px] text-amber-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+            <p className="text-[5.5px] text-amber-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto mt-0.5">
+              website : {settings.website || 'sman1julok.sch.id'}, Email : {settings.email || 'info@sman1julok.sch.id'}
             </p>
           </div>
 
           {/* Logo Pemerintah Aceh */}
-          <div className="flex-shrink-0 flex items-center justify-end">
+          <div className="flex-shrink-0 flex items-center justify-end mt-1">
             {settings.showPancasila && (
               <div className="p-0.5 rounded-lg bg-white/95 shadow-2xs">
                 <img
                   src={settings.pancasilaLogo}
                   alt="Logo Pemerintah Aceh"
-                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                  className="h-10.5 w-auto max-w-[40px] object-contain drop-shadow-xs"
                 />
               </div>
             )}
@@ -889,13 +898,13 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         </div>
       </div>
 
-      {/* Sub-header Bar: Title */}
-      <div className="w-full py-0.5 px-3 flex items-center justify-between bg-amber-100/90 border-b border-amber-300 text-amber-950 font-black text-[8px] z-20">
-        <span className="uppercase tracking-widest flex items-center gap-1">
+      {/* Sub-header Bar: Title persis di tengah */}
+      <div className="w-full py-0.5 px-3 relative flex items-center justify-center bg-amber-100/90 border-b border-amber-300 text-amber-950 font-black text-[8.5px] z-20">
+        <span className="uppercase tracking-widest flex items-center justify-center gap-1 text-center">
           <Award className="w-3 h-3 text-rose-800" />
-          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+          {settings.cardTitle || 'KARTU PELAJAR'}
         </span>
-        <span className="font-mono text-rose-900">NISN: {student.nisn}</span>
+        <span className="absolute right-3 font-mono text-rose-900 text-[7.5px]">NISN: {student.nisn}</span>
       </div>
 
       {/* Content Area */}
@@ -1238,12 +1247,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       <div className="w-full pt-2 px-3 pb-1 bg-gradient-to-r from-emerald-950 via-emerald-800 to-teal-950 text-white z-20 shadow-xs flex flex-col">
         <div className="flex items-center justify-between gap-2">
           {/* Logo Sekolah */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
             <div className="p-0.5 rounded-full bg-white shadow-2xs">
               <img
                 src={settings.schoolLogo}
                 alt="Logo Sekolah"
-                className="h-10 w-10 object-contain drop-shadow-xs"
+                className="h-10.5 w-10.5 object-contain drop-shadow-xs"
               />
             </div>
           </div>
@@ -1256,22 +1265,25 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             <h5 className="text-[7px] font-bold uppercase tracking-wider text-teal-200 leading-tight">
               {settings.dinasText || 'DINAS PENDIDIKAN'}
             </h5>
-            <h1 className="text-[12.5px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
+            <h1 className="text-[12px] font-black uppercase tracking-tight leading-tight my-0.5 text-white">
               {settings.schoolName || 'SMA NEGERI 1 JULOK'}
             </h1>
-            <p className="text-[6px] text-emerald-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
-              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur 24458'} • NPSN: {settings.npsn || '10101877'}
+            <p className="text-[5.8px] text-emerald-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto">
+              {settings.schoolAddress || 'Desa Buket Seuraja, Kec. Julok, Kab. Aceh Timur'} • NPSN: {settings.npsn || '10101877'}
+            </p>
+            <p className="text-[5.5px] text-emerald-200/90 font-medium leading-tight truncate max-w-[280px] mx-auto mt-0.5">
+              website : {settings.website || 'sman1julok.sch.id'}, Email : {settings.email || 'info@sman1julok.sch.id'}
             </p>
           </div>
 
           {/* Logo Pemerintah Aceh */}
-          <div className="flex-shrink-0 flex items-center justify-end">
+          <div className="flex-shrink-0 flex items-center justify-end mt-1">
             {settings.showPancasila && (
               <div className="p-0.5 rounded-full bg-white shadow-2xs">
                 <img
                   src={settings.pancasilaLogo}
                   alt="Logo Pemerintah Aceh"
-                  className="h-10 w-auto max-w-[40px] object-contain drop-shadow-xs"
+                  className="h-10.5 w-auto max-w-[40px] object-contain drop-shadow-xs"
                 />
               </div>
             )}
@@ -1286,13 +1298,13 @@ export const StudentCard: React.FC<StudentCardProps> = ({
         </div>
       </div>
 
-      {/* Sub-header Bar: Title */}
-      <div className="w-full py-0.5 px-3 flex items-center justify-between bg-emerald-100 border-b border-emerald-300 text-emerald-950 font-black text-[8px] z-20">
-        <span className="uppercase tracking-widest flex items-center gap-1">
+      {/* Sub-header Bar: Title persis di tengah */}
+      <div className="w-full py-0.5 px-3 relative flex items-center justify-center bg-emerald-100 border-b border-emerald-300 text-emerald-950 font-black text-[8.5px] z-20">
+        <span className="uppercase tracking-widest flex items-center justify-center gap-1 text-center">
           <Star className="w-2.5 h-2.5 text-emerald-700 fill-emerald-600" />
-          {settings.cardTitle || 'KARTU TANDA PELAJAR'}
+          {settings.cardTitle || 'KARTU PELAJAR'}
         </span>
-        <span className="font-mono text-emerald-900">NISN: {student.nisn}</span>
+        <span className="absolute right-3 font-mono text-emerald-900 text-[7.5px]">NISN: {student.nisn}</span>
       </div>
 
       {/* Content Area */}

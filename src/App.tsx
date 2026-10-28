@@ -245,14 +245,20 @@ export default function App() {
       setCurrentUser(user);
       if (user) {
         showToast(`Terhubung sebagai ${user.displayName || user.email}`);
-        // Load cloud settings if available
+        // Load cloud settings and classes if available
         try {
-          const cloudSettings = await loadSettingsFromFirestore(user.uid);
+          const [cloudSettings, cloudClasses] = await Promise.all([
+            loadSettingsFromFirestore(user.uid),
+            loadClassesFromFirestore(user.uid),
+          ]);
           if (cloudSettings) {
             setCardSettings((prev) => ({ ...prev, ...cloudSettings }));
           }
+          if (cloudClasses && cloudClasses.length > 0) {
+            setClasses(cloudClasses);
+          }
         } catch (err) {
-          console.warn('Could not load remote settings', err);
+          console.warn('Could not load remote settings or classes', err);
         }
       }
     });
@@ -344,9 +350,10 @@ export default function App() {
     try {
       setIsSyncing(true);
       await batchSaveStudentsToFirestore(students, currentUser.uid);
+      await batchSaveClassesToFirestore(classes, currentUser.uid);
       await saveSettingsToFirestore(cardSettings, currentUser.uid);
       setCloudStudentCount(students.length);
-      showToast(`Berhasil menyinkronkan ${students.length} data siswa ke Cloud Firestore!`);
+      showToast(`Berhasil menyinkronkan ${students.length} data siswa & ${classes.length} kelas ke Cloud Firestore!`);
     } catch (err) {
       console.error('Sync failed', err);
       showToast('Gagal menyinkronkan ke database cloud.');
@@ -495,6 +502,119 @@ export default function App() {
     showToast(`Gambar kartu ${student.nama} (${resConfig.badge}) berhasil diunduh.`);
   };
 
+  // Handlers for Class Management
+  const handleAddClass = async (newClass: ClassInfo) => {
+    setClasses((prev) => [...prev, newClass]);
+    showToast(`Kelas "${newClass.nama}" berhasil ditambahkan.`);
+    if (currentUser) {
+      try {
+        await saveClassToFirestore(newClass, currentUser.uid);
+      } catch (err) {
+        console.error('Failed saving class to Firestore', err);
+      }
+    }
+  };
+
+  const handleUpdateClass = async (updatedClass: ClassInfo, oldName?: string) => {
+    setClasses((prev) => prev.map((c) => (c.id === updatedClass.id ? updatedClass : c)));
+    showToast(`Data kelas "${updatedClass.nama}" diperbarui.`);
+
+    // If class was renamed and oldName was provided, update all students belonging to oldName
+    if (oldName && oldName !== updatedClass.nama) {
+      const affectedStudents = students.filter((s) => (s.kelas || '').trim() === oldName);
+      if (affectedStudents.length > 0) {
+        setStudents((prev) =>
+          prev.map((s) => ((s.kelas || '').trim() === oldName ? { ...s, kelas: updatedClass.nama } : s))
+        );
+        showToast(`${affectedStudents.length} siswa dialihkan ke kelas "${updatedClass.nama}".`);
+        if (currentUser) {
+          try {
+            const updatedStudents = affectedStudents.map((s) => ({ ...s, kelas: updatedClass.nama }));
+            await batchSaveStudentsToFirestore(updatedStudents, currentUser.uid);
+          } catch (err) {
+            console.error('Failed updating students class in Firestore', err);
+          }
+        }
+      }
+    }
+
+    if (currentUser) {
+      try {
+        await saveClassToFirestore(updatedClass, currentUser.uid);
+      } catch (err) {
+        console.error('Failed updating class in Firestore', err);
+      }
+    }
+  };
+
+  const handleDeleteClass = async (classId: string) => {
+    const cls = classes.find((c) => c.id === classId);
+    setClasses((prev) => prev.filter((c) => c.id !== classId));
+    showToast(`Kelas "${cls?.nama || classId}" berhasil dihapus.`);
+    if (currentUser) {
+      try {
+        await deleteClassFromFirestore(classId);
+      } catch (err) {
+        console.error('Failed deleting class from Firestore', err);
+      }
+    }
+  };
+
+  const handleBulkMoveStudents = async (
+    fromClass: string,
+    toClass: string,
+    studentIds?: string[]
+  ) => {
+    const targetIds =
+      studentIds && studentIds.length > 0
+        ? studentIds
+        : students.filter((s) => (s.kelas || '').trim() === fromClass).map((s) => s.id);
+
+    if (targetIds.length === 0) return;
+
+    setStudents((prev) =>
+      prev.map((s) => (targetIds.includes(s.id) ? { ...s, kelas: toClass } : s))
+    );
+    showToast(`${targetIds.length} siswa berhasil dipindahkan ke Kelas ${toClass}.`);
+
+    if (currentUser) {
+      try {
+        const movedStudents = students
+          .filter((s) => targetIds.includes(s.id))
+          .map((s) => ({ ...s, kelas: toClass }));
+        await batchSaveStudentsToFirestore(movedStudents, currentUser.uid);
+      } catch (err) {
+        console.error('Failed moving students in Firestore', err);
+      }
+    }
+  };
+
+  // Inter-tab Class Navigation Handlers
+  const handleNavigateToStudentsFromClass = (className: string) => {
+    setFocusedClassForStudents(className);
+    setActiveTab('students');
+  };
+
+  const handleNavigateToStudioFromClass = (className: string) => {
+    setFocusedClassForStudio(className);
+    setActiveTab('studio');
+  };
+
+  const handleNavigateToBatchPrintFromClass = (className: string) => {
+    const matched = students.filter((s) => (s.kelas || '').trim() === className);
+    if (matched.length === 0) {
+      showToast(`Belum ada siswa di kelas ${className}.`);
+      return;
+    }
+    setSelectedStudentIds(matched.map((s) => s.id));
+    setIsBatchPrintOpen(true);
+  };
+
+  const handleTriggerMassDownloadZipFromClass = (className: string) => {
+    setFocusedClassForStudio(className);
+    setActiveTab('studio');
+  };
+
   // Students to display in batch print
   const studentsToPrint =
     selectedStudentIds.length > 0
@@ -634,6 +754,18 @@ export default function App() {
               <Users className="w-3.5 h-3.5" />
               <span>Data Siswa ({students.length})</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('classes')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'classes'
+                  ? 'bg-white text-blue-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Manajemen Kelas ({classes.length})</span>
+            </button>
           </div>
 
           {/* Right Action Buttons & Cloud Database Auth */}
@@ -726,7 +858,7 @@ export default function App() {
               activeTab === 'studio' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
             }`}
           >
-            Studio Desain
+            Studio
           </button>
           <button
             onClick={() => setActiveTab('students')}
@@ -734,7 +866,15 @@ export default function App() {
               activeTab === 'students' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
             }`}
           >
-            Data Siswa ({students.length})
+            Siswa ({students.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('classes')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg text-center ${
+              activeTab === 'classes' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Kelas ({classes.length})
           </button>
         </div>
       </header>
@@ -827,13 +967,15 @@ export default function App() {
               settings={cardSettings}
               onUpdateSettings={setCardSettings}
               students={students}
+              classes={classes}
+              initialClass={focusedClassForStudio}
               selectedStudentId={previewStudentId}
               onSelectStudentId={setPreviewStudentId}
               onExportSingleCard={handleExportSingleCard}
               onOpenVerification={handleOpenVerification}
             />
           </div>
-        ) : (
+        ) : activeTab === 'students' ? (
           <div className="space-y-4">
             {/* Header info */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -848,6 +990,13 @@ export default function App() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setActiveTab('classes')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Manajemen Kelas ({classes.length})</span>
+                </button>
+                <button
                   onClick={() => setIsImportModalOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
                 >
@@ -860,6 +1009,8 @@ export default function App() {
             {/* Student Table */}
             <StudentTable
               students={students}
+              classes={classes}
+              initialClassFilter={focusedClassForStudents}
               onAddStudent={handleAddStudent}
               onUpdateStudent={handleUpdateStudent}
               onDeleteStudent={handleDeleteStudent}
@@ -873,8 +1024,23 @@ export default function App() {
               onOpenImportModal={() => setIsImportModalOpen(true)}
               onTriggerPrint={handleTriggerPrint}
               onOpenVerification={handleOpenVerification}
+              onNavigateToClasses={() => setActiveTab('classes')}
             />
           </div>
+        ) : (
+          /* Manajemen Kelas Tab */
+          <ClassManagement
+            classes={classes}
+            students={students}
+            onAddClass={handleAddClass}
+            onUpdateClass={handleUpdateClass}
+            onDeleteClass={handleDeleteClass}
+            onBulkMoveStudents={handleBulkMoveStudents}
+            onNavigateToStudents={handleNavigateToStudentsFromClass}
+            onNavigateToStudio={handleNavigateToStudioFromClass}
+            onNavigateToBatchPrint={handleNavigateToBatchPrintFromClass}
+            onTriggerMassDownloadZip={handleTriggerMassDownloadZipFromClass}
+          />
         )}
       </main>
 
