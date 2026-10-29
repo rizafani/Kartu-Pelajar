@@ -263,6 +263,8 @@ export const DEFAULT_CARD_SETTINGS: CardSettings = {
   // Codes
   barcodeType: 'both',
   qrContent: 'url',
+  showFrontBarcode: true,
+  frontBarcodePosition: 'under_photo',
   
   // Back card
   backTitle: 'TATA TERTIB & KETENTUAN KARTU PELAJAR',

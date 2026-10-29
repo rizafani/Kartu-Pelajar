@@ -123,6 +123,65 @@ export const StudentCard: React.FC<StudentCardProps> = ({
   const secondaryCol = settings.secondaryColor || '#1e4b85';
   const accentCol = settings.accentColor || '#d97706';
 
+  // Front NISN Barcode element (Authentic Code128 format from student.nisn)
+  const renderFrontNisnBarcode = (
+    variant: 'light' | 'gold' | 'dark' | 'emerald' | 'rose' = 'light',
+    customWidth = 84
+  ) => {
+    if (settings.showFrontBarcode === false) return null;
+
+    const bgClass =
+      variant === 'gold'
+        ? 'bg-amber-50/95 border-amber-300'
+        : variant === 'emerald'
+        ? 'bg-emerald-50/95 border-emerald-300'
+        : variant === 'rose'
+        ? 'bg-rose-50/95 border-rose-300'
+        : variant === 'dark'
+        ? 'bg-slate-900 border-cyan-500/60'
+        : 'bg-white border-slate-300';
+
+    const textClass =
+      variant === 'gold'
+        ? 'text-amber-950'
+        : variant === 'emerald'
+        ? 'text-emerald-950'
+        : variant === 'rose'
+        ? 'text-rose-950'
+        : variant === 'dark'
+        ? 'text-cyan-300'
+        : 'text-slate-800';
+
+    return (
+      <div
+        onClick={handleQrClick}
+        title="Klik atau scan Barcode NISN siswa untuk verifikasi"
+        className={`w-full mt-1 p-0.5 rounded border shadow-2xs flex flex-col items-center justify-center cursor-pointer transition-all hover:scale-[1.02] ${bgClass}`}
+      >
+        <div
+          className="w-full flex items-center justify-center overflow-hidden"
+          dangerouslySetInnerHTML={{
+            __html: generateBarcodeSvg(student.nisn, customWidth, 18, {
+              displayValue: false,
+              lineColor: variant === 'dark' ? '#22d3ee' : '#0f172a',
+              background: variant === 'dark' ? '#0f172a' : '#ffffff',
+            }),
+          }}
+        />
+        <div className="flex items-center justify-between w-full px-1 mt-0.5">
+          <span className={`text-[6px] font-mono font-black tracking-wide leading-none ${textClass}`}>
+            NISN: {student.nisn}
+          </span>
+          {student.nis && (
+            <span className="text-[5px] font-mono font-bold text-slate-500 leading-none">
+              NIS: {student.nis}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // --------------------------------------------------------------------------
   // TEMPLATE 1: RESMI KEDINASAN (Flagship Indonesian Government Official Card)
   // --------------------------------------------------------------------------
@@ -205,12 +264,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
 
       {/* 3. MAIN BODY: FOTO BESAR + TABEL IDENTITAS LENGKAP + PENGESAHAN (NO DEAD WHITE SPACE) */}
       <div className="flex-1 px-2.5 py-1.5 flex items-stretch gap-2 z-20 relative">
-        {/* Kolom Kiri: Pas Foto Siswa Ukuran Standar 3x4 Proporsional (Tinggi 116px) */}
+        {/* Kolom Kiri: Pas Foto Siswa Ukuran Standar 3x4 Proporsional */}
         <div className="flex flex-col items-center flex-shrink-0 justify-between w-[86px]">
           <div
             className="relative overflow-hidden bg-blue-600 border-2 border-slate-700/80 shadow-xs w-full"
             style={{
-              height: '116px',
+              height: settings.frontBarcodePosition === 'under_table' ? '116px' : '92px',
               borderRadius:
                 settings.photoBorderRadius === 'circle'
                   ? '50%'
@@ -240,15 +299,19 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             )}
           </div>
 
-          {/* Badge NIS & Status Siswa */}
-          <div className="mt-1 text-center w-full bg-slate-100 rounded border border-slate-300 py-0.5 px-1 shadow-2xs">
-            <span className="text-[7.5px] font-mono font-extrabold text-slate-900 leading-none block">
-              NIS: {student.nis || '-'}
-            </span>
-            <span className="text-[5.5px] font-bold text-emerald-700 uppercase tracking-tighter block mt-0.5">
-              ● SISWA AKTIF
-            </span>
-          </div>
+          {/* Barcode dari Nomor NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('light', 84)
+          ) : (
+            <div className="mt-1 text-center w-full bg-slate-100 rounded border border-slate-300 py-0.5 px-1 shadow-2xs">
+              <span className="text-[7.5px] font-mono font-extrabold text-slate-900 leading-none block">
+                NIS: {student.nis || '-'}
+              </span>
+              <span className="text-[5.5px] font-bold text-emerald-700 uppercase tracking-tighter block mt-0.5">
+                ● SISWA AKTIF
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Kolom Tengah: Tabel Identitas Siswa Resmi (Tinggi terisi penuh, font jelas) */}
@@ -469,11 +532,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
         {/* Kolom Kiri: Foto dengan Bingkai Emas */}
-        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
-          <div className="relative p-1 rounded bg-gradient-to-b from-amber-400 via-yellow-200 to-amber-500 shadow-xs">
+        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px] py-0.5">
+          <div className="relative p-0.5 rounded bg-gradient-to-b from-amber-400 via-yellow-200 to-amber-500 shadow-xs">
             <div
-              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              className="relative overflow-hidden bg-slate-200 w-[74px]"
               style={{
+                height: settings.frontBarcodePosition === 'under_table' ? '98px' : '82px',
                 borderRadius:
                   settings.photoBorderRadius === 'circle'
                     ? '50%'
@@ -502,15 +566,19 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             </div>
           </div>
 
-          {/* Badge NIS */}
-          <div className="mt-1 text-center w-full bg-amber-50 rounded border border-amber-300 py-0.5 px-1 shadow-2xs">
-            <span className="text-[7.5px] font-mono font-extrabold text-amber-950 leading-none block">
-              NIS: {student.nis || '-'}
-            </span>
-            <span className="text-[5.5px] font-bold text-emerald-800 uppercase tracking-tighter block mt-0.5">
-              ● SISWA AKTIF
-            </span>
-          </div>
+          {/* Barcode NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('gold', 84)
+          ) : (
+            <div className="mt-1 text-center w-full bg-amber-50 rounded border border-amber-300 py-0.5 px-1 shadow-2xs">
+              <span className="text-[7.5px] font-mono font-extrabold text-amber-950 leading-none block">
+                NIS: {student.nis || '-'}
+              </span>
+              <span className="text-[5.5px] font-bold text-emerald-800 uppercase tracking-tighter block mt-0.5">
+                ● SISWA AKTIF
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Kolom Tengah: Tabel Identitas Siswa Resmi */}
@@ -696,17 +764,20 @@ export const StudentCard: React.FC<StudentCardProps> = ({
 
       {/* Main Body */}
       <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
-        {/* Left: EMV Chip + Photo */}
-        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+        {/* Left: EMV Chip + Photo + Barcode */}
+        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px] py-0.5">
           {/* Gold EMV Chip Simulation */}
-          <div className="w-10 h-7 rounded overflow-hidden shadow-xs border border-amber-600/50 bg-amber-50">
+          <div className="w-9 h-6 rounded overflow-hidden shadow-xs border border-amber-600/50 bg-amber-50">
             <img src={GOLD_EMV_CHIP_SVG} alt="Smart Chip" className="w-full h-full object-cover" />
           </div>
 
           {/* Photo */}
           <div
-            className="relative overflow-hidden bg-slate-200 border-2 border-slate-700 shadow-xs w-[76px] h-[92px] mt-1"
-            style={{ borderRadius: '4px' }}
+            className="relative overflow-hidden bg-slate-200 border-2 border-slate-700 shadow-xs w-[76px] mt-0.5"
+            style={{
+              height: settings.frontBarcodePosition === 'under_table' ? '90px' : '74px',
+              borderRadius: '4px',
+            }}
           >
             {student.foto ? (
               <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
@@ -721,11 +792,16 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             </div>
           </div>
 
-          <div className="text-center w-full bg-slate-200/80 rounded border border-slate-300 py-0.5 mt-0.5">
-            <span className="text-[6.5px] font-mono font-extrabold text-slate-800">
-              NIS: {student.nis || '-'}
-            </span>
-          </div>
+          {/* Barcode NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('dark', 82)
+          ) : (
+            <div className="text-center w-full bg-slate-200/80 rounded border border-slate-300 py-0.5 mt-0.5">
+              <span className="text-[6.5px] font-mono font-extrabold text-slate-800">
+                NIS: {student.nis || '-'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Center: Identity Block */}
@@ -910,11 +986,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Content Area */}
       <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
         {/* Photo with Batik Corner Accents */}
-        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
-          <div className="relative p-1 rounded bg-rose-900 border border-amber-400 shadow-xs">
+        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px] py-0.5">
+          <div className="relative p-0.5 rounded bg-rose-900 border border-amber-400 shadow-xs">
             <div
-              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              className="relative overflow-hidden bg-slate-200 w-[74px]"
               style={{
+                height: settings.frontBarcodePosition === 'under_table' ? '98px' : '82px',
                 borderRadius:
                   settings.photoBorderRadius === 'circle'
                     ? '50%'
@@ -937,11 +1014,16 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             </div>
           </div>
 
-          <div className="mt-1 text-center w-full bg-rose-50 rounded border border-rose-300 py-0.5 px-1 shadow-2xs">
-            <span className="text-[7.5px] font-mono font-extrabold text-rose-950 leading-none block">
-              NIS: {student.nis || '-'}
-            </span>
-          </div>
+          {/* Barcode NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('rose', 84)
+          ) : (
+            <div className="mt-1 text-center w-full bg-rose-50 rounded border border-rose-300 py-0.5 px-1 shadow-2xs">
+              <span className="text-[7.5px] font-mono font-extrabold text-rose-950 leading-none block">
+                NIS: {student.nis || '-'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Identity Table */}
@@ -1115,10 +1197,13 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Main Body */}
       <div className="flex-1 pl-4 pr-3 py-1 flex items-stretch gap-3 z-20 overflow-hidden">
         {/* Photo */}
-        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
+        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px] py-0.5">
           <div
-            className="relative overflow-hidden bg-slate-200 border border-slate-300 shadow-sm w-[78px] h-[98px]"
-            style={{ borderRadius: '6px' }}
+            className="relative overflow-hidden bg-slate-200 border border-slate-300 shadow-sm w-[78px]"
+            style={{
+              height: settings.frontBarcodePosition === 'under_table' ? '98px' : '82px',
+              borderRadius: '6px',
+            }}
           >
             {student.foto ? (
               <img src={student.foto} alt={student.nama} className="w-full h-full object-cover" />
@@ -1130,11 +1215,16 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             )}
           </div>
 
-          <div className="text-center w-full bg-slate-100 rounded border border-slate-200 py-0.5 mt-1">
-            <span className="text-[7px] font-mono font-bold text-slate-800">
-              NIS: {student.nis || '-'}
-            </span>
-          </div>
+          {/* Barcode NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('light', 84)
+          ) : (
+            <div className="text-center w-full bg-slate-100 rounded border border-slate-200 py-0.5 mt-1">
+              <span className="text-[7px] font-mono font-bold text-slate-800">
+                NIS: {student.nis || '-'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Identity Data */}
@@ -1310,11 +1400,12 @@ export const StudentCard: React.FC<StudentCardProps> = ({
       {/* Content Area */}
       <div className="flex-1 px-3 py-1 flex items-stretch gap-2.5 z-20 overflow-hidden">
         {/* Photo with Emerald Frame */}
-        <div className="flex flex-col items-center justify-between flex-shrink-0 w-[84px] py-0.5">
-          <div className="relative p-1 rounded bg-emerald-800 border border-emerald-400 shadow-xs">
+        <div className="flex flex-col items-center flex-shrink-0 justify-between w-[84px] py-0.5">
+          <div className="relative p-0.5 rounded bg-emerald-800 border border-emerald-400 shadow-xs">
             <div
-              className="relative overflow-hidden bg-slate-200 w-[74px] h-[98px]"
+              className="relative overflow-hidden bg-slate-200 w-[74px]"
               style={{
+                height: settings.frontBarcodePosition === 'under_table' ? '98px' : '82px',
                 borderRadius:
                   settings.photoBorderRadius === 'circle'
                     ? '50%'
@@ -1337,11 +1428,16 @@ export const StudentCard: React.FC<StudentCardProps> = ({
             </div>
           </div>
 
-          <div className="mt-1 text-center w-full bg-emerald-50 rounded border border-emerald-300 py-0.5 px-1 shadow-2xs">
-            <span className="text-[7.5px] font-mono font-extrabold text-emerald-950 leading-none block">
-              NIS: {student.nis || '-'}
-            </span>
-          </div>
+          {/* Barcode NISN Siswa di Bagian Depan */}
+          {settings.frontBarcodePosition !== 'under_table' ? (
+            renderFrontNisnBarcode('emerald', 84)
+          ) : (
+            <div className="mt-1 text-center w-full bg-emerald-50 rounded border border-emerald-300 py-0.5 px-1 shadow-2xs">
+              <span className="text-[7.5px] font-mono font-extrabold text-emerald-950 leading-none block">
+                NIS: {student.nis || '-'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Identity Table */}

@@ -198,11 +198,12 @@ export async function renderCardToBlob(
       ctx.textAlign = 'right';
       ctx.fillText(`NISN: ${student.nisn}`, width - 40, 153);
 
-      // 3. Student Photo (Left Column - 195px x 260px)
+      // 3. Student Photo (Left Column - 195px)
       const photoX = 45;
       const photoY = 185;
       const photoW = 195;
-      const photoH = 260;
+      const hasFrontBarcode = settings.showFrontBarcode !== false;
+      const photoH = hasFrontBarcode ? 215 : 260;
       const radius = 8;
 
       ctx.save();
@@ -226,16 +227,55 @@ export async function renderCardToBlob(
       ctx.stroke();
       ctx.restore();
 
-      // Under photo: NIS badge
-      ctx.fillStyle = '#f1f5f9';
-      ctx.fillRect(photoX, 455, photoW, 36);
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(photoX, 455, photoW, 36);
-      ctx.fillStyle = primaryNavy;
-      ctx.font = 'bold 16px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`NIS: ${student.nis || '-'}`, photoX + photoW / 2, 478);
+      if (hasFrontBarcode) {
+        // Barcode NISN Box di Bagian Depan
+        const barcodeSvg = generateBarcodeSvg(student.nisn, photoW - 10, 42, {
+          displayValue: false,
+          lineColor: '#0f172a',
+          background: '#ffffff',
+        });
+        const barcodeDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(barcodeSvg)}`;
+        const barcodeImg = await loadImage(barcodeDataUrl);
+
+        const bY = 408;
+        const bH = 68;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(photoX, bY, photoW, bH);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(photoX, bY, photoW, bH);
+
+        if (barcodeImg) {
+          ctx.drawImage(barcodeImg, photoX + 6, bY + 4, photoW - 12, 44);
+        }
+
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`NISN: ${student.nisn}`, photoX + photoW / 2, bY + 62);
+
+        // Under Barcode: NIS badge
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(photoX, 482, photoW, 28);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(photoX, 482, photoW, 28);
+        ctx.fillStyle = primaryNavy;
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`NIS: ${student.nis || '-'}`, photoX + photoW / 2, 501);
+      } else {
+        // Under photo: NIS badge
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillRect(photoX, 455, photoW, 36);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(photoX, 455, photoW, 36);
+        ctx.fillStyle = primaryNavy;
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`NIS: ${student.nis || '-'}`, photoX + photoW / 2, 478);
+      }
 
       // 4. Student Identity Table (Center Column)
       const tableX = 265;

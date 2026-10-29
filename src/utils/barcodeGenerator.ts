@@ -95,19 +95,57 @@ export function getQrStringForStudent(student: Student, settings?: CardSettings)
   return buildStudentVerificationUrl(student, settings);
 }
 
+import JsBarcode from 'jsbarcode';
+
 /**
- * Generate SVG Barcode (Code128 simulated visual) for high fidelity printing
+ * Generate SVG Barcode (Authentic Code128 format via JsBarcode)
+ * Highly optimized for 1D laser scanners and smartphone cameras.
  */
-export function generateBarcodeSvg(code: string, width = 160, height = 36): string {
-  // Simple deterministic Code128-like pattern based on ASCII chars
+export function generateBarcodeSvg(
+  code: string,
+  width = 160,
+  height = 30,
+  options?: {
+    displayValue?: boolean;
+    fontSize?: number;
+    lineColor?: string;
+    background?: string;
+  }
+): string {
   const cleanCode = (code || '0000000000').trim();
+
+  // Try authentic JsBarcode SVG generation
+  if (typeof document !== 'undefined') {
+    try {
+      const svgNode = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      JsBarcode(svgNode, cleanCode, {
+        format: 'CODE128',
+        width: width < 100 ? 1 : 1.4,
+        height: Math.max(12, height - (options?.displayValue !== false ? 9 : 2)),
+        displayValue: options?.displayValue ?? true,
+        text: cleanCode,
+        font: 'monospace',
+        fontSize: options?.fontSize || 8,
+        textMargin: 1,
+        margin: 1,
+        background: options?.background || '#ffffff',
+        lineColor: options?.lineColor || '#0f172a',
+      });
+      return svgNode.outerHTML;
+    } catch (err) {
+      console.warn('JsBarcode SVG fallback notice:', err);
+    }
+  }
+
+  // Fallback deterministic SVG pattern
   let barsHtml = '';
   let curX = 4;
+  const barHeight = Math.max(12, height - 10);
   
   // Start pattern
-  barsHtml += `<rect x="${curX}" y="0" width="2" height="${height - 10}" fill="#0f172a" />`;
+  barsHtml += `<rect x="${curX}" y="1" width="2" height="${barHeight}" fill="#0f172a" />`;
   curX += 3;
-  barsHtml += `<rect x="${curX}" y="0" width="1" height="${height - 10}" fill="#0f172a" />`;
+  barsHtml += `<rect x="${curX}" y="1" width="1" height="${barHeight}" fill="#0f172a" />`;
   curX += 3;
 
   for (let i = 0; i < cleanCode.length; i++) {
@@ -117,16 +155,16 @@ export function generateBarcodeSvg(code: string, width = 160, height = 36): stri
     const b2 = ((charCode >> 2) % 3) + 1;
     const s2 = ((charCode >> 3) % 2) + 1;
 
-    barsHtml += `<rect x="${curX}" y="0" width="${b1}" height="${height - 10}" fill="#0f172a" />`;
+    barsHtml += `<rect x="${curX}" y="1" width="${b1}" height="${barHeight}" fill="#0f172a" />`;
     curX += b1 + s1;
-    barsHtml += `<rect x="${curX}" y="0" width="${b2}" height="${height - 10}" fill="#0f172a" />`;
+    barsHtml += `<rect x="${curX}" y="1" width="${b2}" height="${barHeight}" fill="#0f172a" />`;
     curX += b2 + s2;
   }
 
   // Stop pattern
-  barsHtml += `<rect x="${curX}" y="0" width="2" height="${height - 10}" fill="#0f172a" />`;
+  barsHtml += `<rect x="${curX}" y="1" width="2" height="${barHeight}" fill="#0f172a" />`;
   curX += 4;
-  barsHtml += `<rect x="${curX}" y="0" width="1" height="${height - 10}" fill="#0f172a" />`;
+  barsHtml += `<rect x="${curX}" y="1" width="1" height="${barHeight}" fill="#0f172a" />`;
   curX += 4;
 
   const totalWidth = Math.max(curX + 4, width);
@@ -134,8 +172,12 @@ export function generateBarcodeSvg(code: string, width = 160, height = 36): stri
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${height}" width="${totalWidth}" height="${height}">
     <rect width="${totalWidth}" height="${height}" fill="#ffffff" rx="2" />
     ${barsHtml}
-    <text x="${totalWidth / 2}" y="${height - 1}" font-family="'Space Mono', monospace, Courier" font-size="7.5" font-weight="700" text-anchor="middle" fill="#334155" letter-spacing="1.5">
-      ${cleanCode}
-    </text>
+    ${
+      options?.displayValue !== false
+        ? `<text x="${totalWidth / 2}" y="${height - 1.5}" font-family="'Space Mono', monospace, Courier" font-size="7.5" font-weight="700" text-anchor="middle" fill="#334155" letter-spacing="1.5">
+            ${cleanCode}
+          </text>`
+        : ''
+    }
   </svg>`;
 }

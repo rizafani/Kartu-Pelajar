@@ -103,6 +103,8 @@ export interface CardSettings {
   // Codes
   barcodeType: 'qr' | 'barcode' | 'both';
   qrContent: 'nisn' | 'nis' | 'url' | 'all_info';
+  showFrontBarcode: boolean;
+  frontBarcodePosition: 'under_photo' | 'under_table';
   
   // Back of card
   backTitle: string;

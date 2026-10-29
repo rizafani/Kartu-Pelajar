@@ -1117,7 +1117,7 @@ export const CardStudio: React.FC<CardStudioProps> = ({
             {/* QR Content setting */}
             <div className="pt-4 border-t border-slate-100">
               <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-1.5">
-                Isi Data QR Code
+                Isi Data QR Code (Tautan Verifikasi)
               </label>
               <select
                 value={settings.qrContent}
@@ -1129,6 +1129,64 @@ export const CardStudio: React.FC<CardStudioProps> = ({
                 <option value="nis">Nomor Induk Siswa (NIS Lokal)</option>
                 <option value="all_info">Data Lengkap Siswa (JSON)</option>
               </select>
+            </div>
+
+            {/* Barcode NISN Bagian Depan */}
+            <div className="pt-4 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">
+                    Barcode NISN di Kartu Bagian Depan
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Menampilkan barcode 1D (Code 128) dari nomor NISN siswa yang siap di-scan
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.showFrontBarcode !== false}
+                  onChange={(e) =>
+                    onUpdateSettings({ ...settings, showFrontBarcode: e.target.checked })
+                  }
+                  className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                />
+              </div>
+
+              {settings.showFrontBarcode !== false && (
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                    Posisi Barcode di Bagian Depan
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({ ...settings, frontBarcodePosition: 'under_photo' })
+                      }
+                      className={`py-1.5 px-2.5 text-xs font-semibold rounded-lg border text-center cursor-pointer transition-colors ${
+                        settings.frontBarcodePosition !== 'under_table'
+                          ? 'border-blue-600 bg-blue-50 text-blue-800 font-bold'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Di Bawah Pas Foto (Standar)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({ ...settings, frontBarcodePosition: 'under_table' })
+                      }
+                      className={`py-1.5 px-2.5 text-xs font-semibold rounded-lg border text-center cursor-pointer transition-colors ${
+                        settings.frontBarcodePosition === 'under_table'
+                          ? 'border-blue-600 bg-blue-50 text-blue-800 font-bold'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      Di Bawah Tabel Identitas
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
