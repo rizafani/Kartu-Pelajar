@@ -716,7 +716,7 @@ export async function matchPhotosFromZip(
       else if (lower.endsWith('.webp')) mimeType = 'image/webp';
 
       const uint8 = await entry.async('uint8array');
-      const blob = new Blob([uint8], { type: mimeType });
+      const blob = new Blob([uint8 as any], { type: mimeType });
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);

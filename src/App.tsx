@@ -41,6 +41,7 @@ import { StudentTable } from './components/StudentTable';
 import { ClassManagement } from './components/ClassManagement';
 import { ImportExportModal } from './components/ImportExportModal';
 import { ZipPhotoModal } from './components/ZipPhotoModal';
+import { AuthTroubleshootModal } from './components/AuthTroubleshootModal';
 import { BatchPrintView } from './components/BatchPrintView';
 import { SingleCardModal } from './components/SingleCardModal';
 import { WebcamModal } from './components/WebcamModal';
@@ -52,6 +53,7 @@ import {
   db,
   testConnection,
   signInWithGoogle,
+  checkRedirectAuth,
   signOutUser,
   saveStudentToFirestore,
   deleteStudentFromFirestore,
@@ -77,6 +79,11 @@ export default function App() {
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [cloudStudentCount, setCloudStudentCount] = useState<number>(0);
+  const [authErrorModalData, setAuthErrorModalData] = useState<{
+    code: string;
+    message: string;
+    domain: string;
+  } | null>(null);
   const isRemoteSettingsUpdate = useRef(false);
   const isFirstAuthCheck = useRef(true);
 
@@ -201,7 +208,7 @@ export default function App() {
     window.history.pushState({}, '', newUrl);
   };
 
-  // Test connection on initial app boot
+  // Test connection on initial app boot and check redirect auth result
   useEffect(() => {
     testConnection().then((connected) => {
       setIsCloudConnected(connected);
@@ -209,6 +216,17 @@ export default function App() {
         console.log('Firebase Firestore connection verified.');
       }
     });
+
+    checkRedirectAuth()
+      .then((user) => {
+        if (user) {
+          setCurrentUser(user);
+          showToast(`Terhubung sebagai ${user.displayName || user.email}`);
+        }
+      })
+      .catch((err) => {
+        console.warn('Redirect auth check notice:', err);
+      });
   }, []);
 
   // Listen to Auth State
@@ -402,12 +420,30 @@ export default function App() {
     }
   };
 
-  // Login handler
-  const handleLogin = async () => {
+  // Login handler with error diagnostics & troubleshooting modal
+  const handleLogin = async (useRedirect: boolean | unknown = false) => {
+    const shouldRedirect = useRedirect === true;
     try {
-      await signInWithGoogle();
-    } catch (err) {
-      console.error('Login error', err);
+      showToast('Menghubungkan ke Akun Google...');
+      const user = await signInWithGoogle(shouldRedirect);
+      if (user) {
+        showToast(`Selamat datang, ${user.displayName || user.email}!`);
+      }
+    } catch (err: any) {
+      console.error('Google Sign-in failed:', err);
+      const errCode = err?.code || 'auth/unknown';
+      const errMsg = err?.message || String(err);
+
+      if (errCode === 'auth/popup-closed-by-user') {
+        showToast('Login Google dibatalkan.');
+        return;
+      }
+
+      setAuthErrorModalData({
+        code: errCode,
+        message: errMsg,
+        domain: typeof window !== 'undefined' ? window.location.hostname : '',
+      });
     }
   };
 
@@ -907,7 +943,7 @@ export default function App() {
               </div>
             ) : (
               <button
-                onClick={handleLogin}
+                onClick={() => handleLogin(false)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer"
                 title="Hubungkan akun Google untuk menyimpan data ke Cloud Firestore"
               >
@@ -1040,13 +1076,29 @@ export default function App() {
                 <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
               </button>
             ) : (
-              <button
-                onClick={handleLogin}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Masuk Google untuk Sinkron Antar-Perangkat</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleLogin(false)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Masuk Google untuk Sinkron</span>
+                </button>
+                <button
+                  onClick={() =>
+                    setAuthErrorModalData({
+                      code: 'PANDUAN_SINKRONISASI',
+                      message: 'Status autentikasi dan opsi cadangan data lintas-perangkat.',
+                      domain: typeof window !== 'undefined' ? window.location.hostname : '',
+                    })
+                  }
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 text-xs font-semibold rounded-xl shadow-2xs transition-colors cursor-pointer"
+                  title="Bantuan Sinkronisasi & Opsi Ekspor/Impor Cadangan Offline"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="hidden sm:inline">Bantuan & Cadangan</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -1215,6 +1267,25 @@ export default function App() {
         onClose={() => setWebcamStudent(null)}
         onPhotoCaptured={(std, photoUrl) => {
           handleUpdateStudent({ ...std, foto: photoUrl });
+        }}
+      />
+
+      <AuthTroubleshootModal
+        isOpen={!!authErrorModalData}
+        onClose={() => setAuthErrorModalData(null)}
+        errorCode={authErrorModalData?.code || ''}
+        errorMessage={authErrorModalData?.message || ''}
+        domain={authErrorModalData?.domain || ''}
+        onRetryWithRedirect={() => handleLogin(true)}
+        onRetryWithPopup={() => handleLogin(false)}
+        students={students}
+        classes={classes}
+        cardSettings={cardSettings}
+        onRestoreBackup={({ students: restoredStudents, classes: restoredClasses, settings: restoredSettings }) => {
+          if (restoredStudents && restoredStudents.length > 0) setStudents(restoredStudents);
+          if (restoredClasses && restoredClasses.length > 0) setClasses(restoredClasses);
+          if (restoredSettings) setCardSettings((prev) => ({ ...prev, ...restoredSettings }));
+          showToast('Data cadangan berhasil dipulihkan!');
         }}
       />
 

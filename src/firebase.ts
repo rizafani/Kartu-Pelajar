@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
   User,
@@ -30,6 +32,9 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
 export enum OperationType {
   CREATE = 'create',
@@ -99,12 +104,26 @@ export async function testConnection(): Promise<boolean> {
 }
 
 // Auth helpers
-export async function signInWithGoogle(): Promise<User> {
+export async function signInWithGoogle(useRedirect = false): Promise<User | null> {
   try {
+    if (useRedirect) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (err) {
+  } catch (err: any) {
     console.error('Google Sign-in failed', err);
+    throw err;
+  }
+}
+
+export async function checkRedirectAuth(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    return result ? result.user : null;
+  } catch (err) {
+    console.warn('Redirect auth check error:', err);
     throw err;
   }
 }
