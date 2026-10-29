@@ -259,10 +259,10 @@ export const StudentTable: React.FC<StudentTableProps> = ({
           <button
             onClick={onOpenZipModal}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
-            title="Upload banyak foto sekaligus dari file ZIP (dibaca sesuai NIS)"
+            title="Upload banyak pas foto sekaligus dari berkas ZIP (format nama file: nomor NISN siswa)"
           >
             <FileArchive className="w-3.5 h-3.5 text-blue-600" />
-            <span>Upload Foto Massal (ZIP by NIS)</span>
+            <span>Upload Foto Massal (ZIP NISN)</span>
           </button>
 
           {selectedStudentIds.length > 0 && (

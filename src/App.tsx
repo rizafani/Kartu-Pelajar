@@ -26,7 +26,7 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { CardSettings, PrintSettings, Student, ClassInfo } from './types';
 import {
   DEFAULT_CARD_SETTINGS,
@@ -77,7 +77,8 @@ export default function App() {
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [cloudStudentCount, setCloudStudentCount] = useState<number>(0);
-  const isInitialCloudLoad = useRef(true);
+  const isRemoteSettingsUpdate = useRef(false);
+  const isFirstAuthCheck = useRef(true);
 
   // Students state with LocalStorage persistence
   const [students, setStudents] = useState<Student[]>(() => {
@@ -216,35 +217,19 @@ export default function App() {
       setCurrentUser(user);
       if (user) {
         showToast(`Terhubung sebagai ${user.displayName || user.email}`);
-        // Load cloud settings and classes if available
-        try {
-          const [cloudSettings, cloudClasses] = await Promise.all([
-            loadSettingsFromFirestore(user.uid),
-            loadClassesFromFirestore(user.uid),
-          ]);
-          if (cloudSettings) {
-            setCardSettings((prev) => ({ ...prev, ...cloudSettings }));
-          }
-          if (cloudClasses && cloudClasses.length > 0) {
-            setClasses(cloudClasses);
-          }
-        } catch (err) {
-          console.warn('Could not load remote settings or classes', err);
-        }
       }
     });
     return () => unsubscribe();
   }, []);
 
-  // Sync Students in realtime from Firestore when user is authenticated
+  // Continuous Real-Time Synchronization across Devices (Firestore onSnapshot)
   useEffect(() => {
     if (!currentUser) return;
 
-    const pathForOnSnapshot = 'students';
-    const q = query(collection(db, pathForOnSnapshot), where('ownerId', '==', currentUser.uid));
-
-    const unsubscribe = onSnapshot(
-      q,
+    // 1. Real-time Students Listener across Devices
+    const qStudents = query(collection(db, 'students'), where('ownerId', '==', currentUser.uid));
+    const unsubStudents = onSnapshot(
+      qStudents,
       (snapshot) => {
         setCloudStudentCount(snapshot.size);
         if (!snapshot.empty) {
@@ -267,22 +252,69 @@ export default function App() {
             };
           });
 
-          // Only replace local if remote has data
-          if (isInitialCloudLoad.current) {
-            setStudents(remoteStudents);
-            isInitialCloudLoad.current = false;
-          }
+          // Continuously keep local students up-to-date with remote Firestore
+          setStudents(remoteStudents);
+        } else if (isFirstAuthCheck.current && students.length > 0) {
+          // If remote is empty, automatically seed cloud with local data so other devices can access it immediately
+          batchSaveStudentsToFirestore(students, currentUser.uid).catch((err) =>
+            console.warn('Initial student cloud push error:', err)
+          );
         }
       },
       (error) => {
-        handleFirestoreError(error, OperationType.GET, pathForOnSnapshot);
+        handleFirestoreError(error, OperationType.GET, 'students');
       }
     );
 
-    return () => unsubscribe();
+    // 2. Real-time Classes Listener across Devices
+    const qClasses = query(collection(db, 'classes'), where('ownerId', '==', currentUser.uid));
+    const unsubClasses = onSnapshot(
+      qClasses,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteClasses = snapshot.docs.map((d) => d.data() as ClassInfo);
+          setClasses(remoteClasses);
+        } else if (isFirstAuthCheck.current && classes.length > 0) {
+          batchSaveClassesToFirestore(classes, currentUser.uid).catch((err) =>
+            console.warn('Initial class cloud push error:', err)
+          );
+        }
+      },
+      (error) => {
+        console.warn('Classes real-time sync warning:', error);
+      }
+    );
+
+    // 3. Real-time Settings Listener across Devices
+    const settingDocRef = doc(db, 'settings', `school_setting_${currentUser.uid}`);
+    const unsubSettings = onSnapshot(
+      settingDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const remote = docSnap.data() as CardSettings;
+          isRemoteSettingsUpdate.current = true;
+          setCardSettings((prev) => ({ ...prev, ...remote }));
+        } else if (isFirstAuthCheck.current) {
+          saveSettingsToFirestore(cardSettings, currentUser.uid).catch((err) =>
+            console.warn('Initial settings cloud push error:', err)
+          );
+        }
+      },
+      (error) => {
+        console.warn('Settings real-time sync warning:', error);
+      }
+    );
+
+    isFirstAuthCheck.current = false;
+
+    return () => {
+      unsubStudents();
+      unsubClasses();
+      unsubSettings();
+    };
   }, [currentUser]);
 
-  // Persist students to localStorage
+  // Persist students to localStorage for offline cache
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
@@ -291,7 +323,7 @@ export default function App() {
     }
   }, [students]);
 
-  // Persist card settings to localStorage and Firestore
+  // Persist card settings to localStorage and auto-sync to Firestore (with loop-prevention)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(cardSettings));
@@ -300,13 +332,17 @@ export default function App() {
     }
 
     if (currentUser) {
+      if (isRemoteSettingsUpdate.current) {
+        isRemoteSettingsUpdate.current = false;
+        return;
+      }
       saveSettingsToFirestore(cardSettings, currentUser.uid).catch((err) => {
         console.warn('Failed auto-saving settings to Cloud', err);
       });
     }
   }, [cardSettings, currentUser]);
 
-  // Cloud Sync Handler: upload all current local students to Firestore
+  // Cloud Sync Handler: upload all current local students and classes to Firestore
   const handleSyncAllToCloud = async () => {
     if (!currentUser) {
       showToast('Silakan masuk dengan akun Google terlebih dahulu.');
@@ -320,16 +356,49 @@ export default function App() {
 
     try {
       setIsSyncing(true);
-      await batchSaveStudentsToFirestore(students, currentUser.uid);
-      await batchSaveClassesToFirestore(classes, currentUser.uid);
-      await saveSettingsToFirestore(cardSettings, currentUser.uid);
+      await Promise.all([
+        batchSaveStudentsToFirestore(students, currentUser.uid),
+        batchSaveClassesToFirestore(classes, currentUser.uid),
+        saveSettingsToFirestore(cardSettings, currentUser.uid),
+      ]);
       setCloudStudentCount(students.length);
-      showToast(`Berhasil menyinkronkan ${students.length} data siswa & ${classes.length} kelas ke Cloud Firestore!`);
+      showToast(`Berhasil menyinkronkan ${students.length} siswa & ${classes.length} kelas antar-perangkat!`);
     } catch (err) {
       console.error('Sync failed', err);
       showToast('Gagal menyinkronkan ke database cloud.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Mass Photo Apply Handler from ZIP
+  const handleApplyPhotosFromZip = async (updatedStudents: Student[]) => {
+    setStudents(updatedStudents);
+    const changedCount = updatedStudents.filter((s) => {
+      const orig = students.find((o) => o.id === s.id);
+      return orig ? orig.foto !== s.foto : !!s.foto;
+    }).length;
+
+    showToast(`Berhasil menerapkan ${changedCount} foto ke data siswa.`);
+    setIsZipModalOpen(false);
+
+    if (currentUser) {
+      try {
+        setIsSyncing(true);
+        const changed = updatedStudents.filter((s) => {
+          const orig = students.find((o) => o.id === s.id);
+          return orig ? orig.foto !== s.foto : !!s.foto;
+        });
+        if (changed.length > 0) {
+          await batchSaveStudentsToFirestore(changed, currentUser.uid);
+          showToast(`${changed.length} foto siswa tersinkronkan ke Cloud Firestore!`);
+        }
+      } catch (err) {
+        console.error('Failed saving photos to Firestore', err);
+        showToast('Foto tersimpan di memori browser lokal.');
+      } finally {
+        setIsSyncing(false);
+      }
     }
   };
 
@@ -923,24 +992,39 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 flex-1">
-        {/* Cloud Database Integration Status Banner */}
-        <div className="mb-5 bg-white border border-emerald-200/80 rounded-2xl p-3.5 px-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* Multi-Device Cloud Real-Time Sync Status Banner */}
+        <div className={`mb-5 rounded-2xl p-3.5 px-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border transition-colors ${
+          currentUser
+            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+            : 'bg-amber-50/80 border-amber-200 text-amber-950'
+        }`}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center flex-shrink-0 shadow-2xs">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-2xs ${
+              currentUser ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+            }`}>
               <Database className="w-4.5 h-4.5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-900">Database Cloud Firestore:</span>
-                <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Aktif & Terhubung
+                <span className="text-xs font-extrabold">
+                  {currentUser ? 'Sinkronisasi Antar-Perangkat (Cloud Real-Time):' : 'Status Sinkronisasi Multi-Perangkat:'}
                 </span>
+                {currentUser ? (
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Tersambung Real-Time
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-800 bg-white px-2 py-0.5 rounded-full border border-amber-200 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Mode Lokal (Perangkat Ini Saja)
+                  </span>
+                )}
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[11px] text-slate-600 mt-0.5">
                 {currentUser
-                  ? `Terhubung ke akun ${currentUser.email}. ${cloudStudentCount > 0 ? `${cloudStudentCount} siswa tersimpan di cloud.` : 'Klik tombol sinkronisasi untuk menyimpan data ke Cloud Firestore.'}`
-                  : 'Database cloud telah aktif. Hubungkan akun Google untuk menyinkronkan data siswa & desain antar-perangkat secara otomatis.'}
+                  ? `Terhubung ke akun ${currentUser.email}. Seluruh perubahan data siswa (${students.length}), foto, dan kelas (${classes.length}) otomatis tersinkronkan langsung ke HP, Laptop, atau PC lain yang Anda buka.`
+                  : 'Buka di HP, Laptop, atau Komputer lain? Masuk dengan Akun Google untuk mengakses data siswa, foto, dan kelas yang sama secara realtime tanpa hilang.'}
               </p>
             </div>
           </div>
@@ -950,18 +1034,18 @@ export default function App() {
               <button
                 onClick={handleSyncAllToCloud}
                 disabled={isSyncing}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Data ke Cloud'}</span>
+                <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Sekarang'}</span>
               </button>
             ) : (
               <button
                 onClick={handleLogin}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Hubungkan Akun Google</span>
+                <span>Masuk Google untuk Sinkron Antar-Perangkat</span>
               </button>
             )}
           </div>
@@ -1106,6 +1190,13 @@ export default function App() {
         students={students}
         onImportStudents={handleImportStudents}
         onUpdateStudents={setStudents}
+      />
+
+      <ZipPhotoModal
+        isOpen={isZipModalOpen}
+        onClose={() => setIsZipModalOpen(false)}
+        students={students}
+        onApplyPhotos={handleApplyPhotosFromZip}
       />
 
       <SingleCardModal

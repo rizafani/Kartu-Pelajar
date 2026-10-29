@@ -9,9 +9,10 @@ import {
   ArrowRight,
   Sparkles,
   Info,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Student } from '../types';
-import { matchPhotosFromZip, downloadSampleZipByNis } from '../utils/excelParser';
+import { matchPhotosFromZip, downloadSampleZipByNis, downloadSampleZipByNisn } from '../utils/excelParser';
 
 interface ZipPhotoModalProps {
   isOpen: boolean;
@@ -26,14 +27,14 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
   students,
   onApplyPhotos,
 }) => {
-  const [matchField, setMatchField] = useState<'nis' | 'nisn' | 'nama' | 'auto'>('nis');
+  const [matchField, setMatchField] = useState<'nis' | 'nisn' | 'nama' | 'auto'>('nisn');
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [matchResult, setMatchResult] = useState<{
     matchedCount: number;
     updatedStudents: Student[];
-    matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string }[];
+    matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string; previewUrl: string }[];
     unmatchedFiles: string[];
   } | null>(null);
   const [successApplied, setSuccessApplied] = useState(false);
@@ -50,7 +51,7 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
     try {
       const result = await matchPhotosFromZip(file, students, matchField);
       if (result.matchedCount === 0 && result.unmatchedFiles.length === 0) {
-        setErrorMsg('File ZIP tidak berisi gambar pas foto (.jpg, .jpeg, .png, .webp).');
+        setErrorMsg('File ZIP tidak berisi file gambar pas foto (.jpg, .jpeg, .png, .webp).');
       } else {
         setMatchResult(result);
       }
@@ -75,7 +76,7 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div className="flex items-center gap-2.5">
@@ -84,10 +85,10 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                Upload Foto Massal dari Data ZIP
+                Upload Foto Massal dari Berkas ZIP
               </h3>
               <p className="text-xs text-slate-500">
-                Otomatis membaca dan memasangkan pas foto sesuai dengan NIS siswa
+                Otomatis membaca dan memasangkan pas foto siswa berdasarkan nomor NISN (10 Digit)
               </p>
             </div>
           </div>
@@ -101,35 +102,12 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto py-4 space-y-4">
-          {/* Method Selector: NIS vs NISN vs Nama */}
+          {/* Method Selector: NISN vs NIS vs Auto */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
             <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-2">
               Pilihan Pola Pembacaan Nama File Foto dalam ZIP:
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <label
-                className={`p-2.5 rounded-lg border flex items-start gap-2 cursor-pointer transition-all ${
-                  matchField === 'nis'
-                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-bold'
-                    : 'border-slate-200 bg-white text-slate-700'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="matchField"
-                  value="nis"
-                  checked={matchField === 'nis'}
-                  onChange={() => setMatchField('nis')}
-                  className="mt-0.5 accent-blue-600"
-                />
-                <div>
-                  <span className="block font-bold">1. Sesuai NIS (Direkomendasikan)</span>
-                  <span className="text-[10px] text-slate-500 font-normal">
-                    Contoh nama file: <code>22231018.jpg</code>, <code>22231001.png</code>
-                  </span>
-                </div>
-              </label>
-
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
               <label
                 className={`p-2.5 rounded-lg border flex items-start gap-2 cursor-pointer transition-all ${
                   matchField === 'nisn'
@@ -146,9 +124,55 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
                   className="mt-0.5 accent-blue-600"
                 />
                 <div>
-                  <span className="block font-bold">2. Sesuai NISN (10 Digit)</span>
+                  <span className="block font-bold">1. Sesuai NISN (Utama)</span>
                   <span className="text-[10px] text-slate-500 font-normal">
-                    Contoh nama file: <code>0096011503.jpg</code>
+                    Contoh: <code>0096011503.jpg</code>
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`p-2.5 rounded-lg border flex items-start gap-2 cursor-pointer transition-all ${
+                  matchField === 'nis'
+                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-bold'
+                    : 'border-slate-200 bg-white text-slate-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="matchField"
+                  value="nis"
+                  checked={matchField === 'nis'}
+                  onChange={() => setMatchField('nis')}
+                  className="mt-0.5 accent-blue-600"
+                />
+                <div>
+                  <span className="block font-bold">2. Sesuai NIS</span>
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    Contoh: <code>22231018.jpg</code>
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`p-2.5 rounded-lg border flex items-start gap-2 cursor-pointer transition-all ${
+                  matchField === 'auto'
+                    ? 'border-blue-600 bg-blue-50/70 text-blue-900 font-bold'
+                    : 'border-slate-200 bg-white text-slate-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="matchField"
+                  value="auto"
+                  checked={matchField === 'auto'}
+                  onChange={() => setMatchField('auto')}
+                  className="mt-0.5 accent-blue-600"
+                />
+                <div>
+                  <span className="block font-bold">3. Deteksi Cerdas</span>
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    NISN / NIS / Nama Siswa
                   </span>
                 </div>
               </label>
@@ -170,11 +194,12 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
                 <FileArchive className="w-6 h-6" />
               </div>
               <h4 className="text-sm font-bold text-slate-800">
-                Tarik Berkas .ZIP Berisi Foto ke Sini
+                Tarik Berkas .ZIP Berisi Pas Foto ke Sini
               </h4>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                Pastikan nama file foto di dalam ZIP adalah nomor{' '}
-                <strong className="text-blue-700 uppercase">{matchField}</strong> siswa.
+              <p className="text-xs text-slate-500 mt-1 max-w-md">
+                Nama file di dalam ZIP dapat berupa nomor{' '}
+                <strong className="text-blue-700 uppercase">{matchField === 'nisn' ? 'NISN (10 digit)' : matchField}</strong> siswa
+                (contoh: <code>0078129341.jpg</code> atau <code>0078129341.png</code>).
               </p>
 
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -194,12 +219,22 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => downloadSampleZipByNis(students)}
+                  onClick={() => downloadSampleZipByNisn(students)}
                   className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-semibold rounded-lg border border-blue-200 transition-colors cursor-pointer"
-                  title="Unduh contoh file ZIP berisi foto dengan nama sesuai NIS siswa saat ini"
+                  title="Unduh contoh file ZIP berisi foto dummy dengan nama sesuai nomor NISN siswa saat ini"
                 >
                   <FileCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Unduh Contoh ZIP (Sesuai NIS)</span>
+                  <span>Unduh Contoh ZIP (Format NISN)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => downloadSampleZipByNis(students)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                  title="Unduh contoh file ZIP berisi foto dummy dengan nama sesuai NIS"
+                >
+                  <FileCheck className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Contoh ZIP (Format NIS)</span>
                 </button>
               </div>
             </div>
@@ -210,7 +245,7 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
                 <div className="flex items-center gap-2 text-emerald-800 text-xs">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                   <span>
-                    Ditemukan <strong>{matchResult.matchedCount} foto</strong> yang cocok dengan data{' '}
+                    Ditemukan <strong>{matchResult.matchedCount} foto</strong> yang berhasil dicocokkan dengan data{' '}
                     <strong>{matchField.toUpperCase()}</strong> siswa.
                   </span>
                 </div>
@@ -223,13 +258,15 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
                 </button>
               </div>
 
-              {/* Matched Details List */}
+              {/* Matched Details List with Image Preview */}
               {matchResult.matchedFileDetails.length > 0 && (
-                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase sticky top-0">
+                    <thead className="bg-slate-100 text-slate-600 text-[10px] font-bold uppercase sticky top-0 z-10">
                       <tr>
+                        <th className="py-2 px-3">Foto</th>
                         <th className="py-2 px-3">Nama Berkas</th>
+                        <th className="py-2 px-3">NISN</th>
                         <th className="py-2 px-3">NIS</th>
                         <th className="py-2 px-3">Nama Siswa</th>
                         <th className="py-2 px-3 text-right">Status</th>
@@ -238,11 +275,27 @@ export const ZipPhotoModal: React.FC<ZipPhotoModalProps> = ({
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {matchResult.matchedFileDetails.map((item, idx) => (
                         <tr key={idx} className="hover:bg-slate-50">
+                          <td className="py-1 px-3">
+                            {item.previewUrl ? (
+                              <img
+                                src={item.previewUrl}
+                                alt={item.studentName}
+                                className="w-7 h-9 object-cover rounded shadow-2xs border border-slate-200"
+                              />
+                            ) : (
+                              <div className="w-7 h-9 bg-slate-100 rounded flex items-center justify-center text-slate-400">
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1.5 px-3 font-mono text-[11px] text-slate-600">
                             {item.filename}
                           </td>
                           <td className="py-1.5 px-3 font-mono font-bold text-blue-900">
-                            {item.studentNis}
+                            {item.studentNisn || '-'}
+                          </td>
+                          <td className="py-1.5 px-3 font-mono text-slate-600">
+                            {item.studentNis || '-'}
                           </td>
                           <td className="py-1.5 px-3 font-semibold text-slate-900">
                             {item.studentName}

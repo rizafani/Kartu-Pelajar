@@ -578,16 +578,16 @@ export function exportStudentsToExcel(students: Student[], format: 'xlsx' | 'csv
 }
 
 /**
- * Read a ZIP file containing photos and match with students by NIS (default), NISN, or Name
+ * Read a ZIP file containing photos and match with students by NISN (recommended), NIS, Name, or Auto
  */
 export async function matchPhotosFromZip(
   zipFile: File,
   students: Student[],
-  matchField: 'nis' | 'nisn' | 'nama' | 'auto' = 'nis'
+  matchField: 'nis' | 'nisn' | 'nama' | 'auto' = 'nisn'
 ): Promise<{
   matchedCount: number;
   updatedStudents: Student[];
-  matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string }[];
+  matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string; previewUrl: string }[];
   unmatchedFiles: string[];
 }> {
   const zip = new JSZip();
@@ -599,15 +599,39 @@ export async function matchPhotosFromZip(
   const nameMap = new Map<string, Student>();
 
   students.forEach((s) => {
-    if (s.nis) nisMap.set(s.nis.trim().toLowerCase(), s);
-    if (s.nisn) nisnMap.set(s.nisn.trim().toLowerCase(), s);
-    const cleanName = s.nama.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (cleanName) nameMap.set(cleanName, s);
+    // NISN variations: exact, digits-only, 10-digit zero-padded, and stripped leading zeros
+    if (s.nisn) {
+      const rawNisn = String(s.nisn).trim().toLowerCase();
+      const digitsNisn = rawNisn.replace(/\D/g, '');
+      nisnMap.set(rawNisn, s);
+      if (digitsNisn) {
+        nisnMap.set(digitsNisn, s);
+        nisnMap.set(digitsNisn.padStart(10, '0'), s);
+        nisnMap.set(digitsNisn.replace(/^0+/, ''), s);
+      }
+    }
+
+    // NIS variations: exact, digits-only, stripped leading zeros
+    if (s.nis) {
+      const rawNis = String(s.nis).trim().toLowerCase();
+      const digitsNis = rawNis.replace(/\D/g, '');
+      nisMap.set(rawNis, s);
+      if (digitsNis) {
+        nisMap.set(digitsNis, s);
+        nisMap.set(digitsNis.replace(/^0+/, ''), s);
+      }
+    }
+
+    // Name variations: normalized alphanumeric
+    if (s.nama) {
+      const cleanName = s.nama.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanName) nameMap.set(cleanName, s);
+    }
   });
 
   let matchedCount = 0;
   const updatedMap = new Map<string, string>(); // studentId -> photoDataUrl
-  const matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string }[] = [];
+  const matchedFileDetails: { filename: string; studentName: string; studentNis: string; studentNisn: string; previewUrl: string }[] = [];
   const unmatchedFiles: string[] = [];
 
   const entries = Object.keys(loadedZip.files);
@@ -615,34 +639,84 @@ export async function matchPhotosFromZip(
     const entry = loadedZip.files[filename];
     if (entry.dir) continue;
     
-    // Check if image file
+    // Ignore macOS metadata, hidden files, thumbnails, etc.
+    const baseName = filename.split('/').pop() || '';
+    if (
+      filename.includes('__MACOSX') ||
+      baseName.startsWith('._') ||
+      baseName.startsWith('.') ||
+      baseName.toLowerCase() === 'thumbs.db' ||
+      baseName.toLowerCase() === 'desktop.ini'
+    ) {
+      continue;
+    }
+
+    // Check if valid image extension
     const lower = filename.toLowerCase();
     if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.png') && !lower.endsWith('.webp')) {
       continue;
     }
 
-    // Extract identifier from filename (e.g. "path/to/22231018.jpg" -> "22231018")
-    const baseName = filename.split('/').pop() || '';
-    const nameWithoutExt = baseName.substring(0, baseName.lastIndexOf('.')).trim().toLowerCase();
+    // Extract identifier from filename (e.g. "path/to/0096011503.jpg" -> "0096011503")
+    const lastDotIdx = baseName.lastIndexOf('.');
+    const nameWithoutExt = (lastDotIdx > 0 ? baseName.substring(0, lastDotIdx) : baseName).trim().toLowerCase();
     const cleanName = nameWithoutExt.replace(/[^a-z0-9]/g, '');
+    const digitsOnly = nameWithoutExt.replace(/\D/g, '');
+
+    // Extract potential 10-digit NISN inside filename (e.g., "NISN_0096011503_Ahmad" -> "0096011503")
+    const match10Digit = nameWithoutExt.match(/\b\d{10}\b/) || nameWithoutExt.match(/\d{10}/);
+    const tenDigitCandidate = match10Digit ? match10Digit[0] : '';
+
+    // Strip common prefixes: "nisn-", "nisn_", "nisn ", "foto-", "pasfoto_"
+    const strippedNisn = nameWithoutExt.replace(/^(nisn|foto|pasfoto)[\s_-]*/i, '').trim();
+    const strippedNis = nameWithoutExt.replace(/^(nis|nipd)[\s_-]*/i, '').trim();
 
     let targetStudent: Student | undefined;
 
-    if (matchField === 'nis') {
-      targetStudent = nisMap.get(nameWithoutExt) || nisMap.get(cleanName);
-    } else if (matchField === 'nisn') {
-      targetStudent = nisnMap.get(nameWithoutExt) || nisnMap.get(cleanName);
+    // Matching Strategy by NISN (Primary / Recommended)
+    if (matchField === 'nisn') {
+      targetStudent =
+        nisnMap.get(nameWithoutExt) ||
+        nisnMap.get(cleanName) ||
+        (tenDigitCandidate ? nisnMap.get(tenDigitCandidate) : undefined) ||
+        (digitsOnly ? nisnMap.get(digitsOnly) : undefined) ||
+        (digitsOnly ? nisnMap.get(digitsOnly.padStart(10, '0')) : undefined) ||
+        nisnMap.get(strippedNisn) ||
+        // Auto fallback to NIS if not matched to NISN
+        nisMap.get(nameWithoutExt) ||
+        nisMap.get(cleanName);
+    } else if (matchField === 'nis') {
+      targetStudent =
+        nisMap.get(nameWithoutExt) ||
+        nisMap.get(cleanName) ||
+        (digitsOnly ? nisMap.get(digitsOnly) : undefined) ||
+        nisMap.get(strippedNis) ||
+        // Fallback to NISN if applicable
+        (tenDigitCandidate ? nisnMap.get(tenDigitCandidate) : undefined) ||
+        nisnMap.get(nameWithoutExt);
     } else if (matchField === 'nama') {
       targetStudent = nameMap.get(cleanName);
     } else {
-      // Auto: try NIS first, then NISN, then Name
-      targetStudent = nisMap.get(nameWithoutExt) || nisMap.get(cleanName) ||
-                      nisnMap.get(nameWithoutExt) || nisnMap.get(cleanName) ||
-                      nameMap.get(cleanName);
+      // Auto (Smart): NISN (10 digits) -> NIS -> Name
+      targetStudent =
+        (tenDigitCandidate ? nisnMap.get(tenDigitCandidate) : undefined) ||
+        nisnMap.get(nameWithoutExt) ||
+        nisnMap.get(cleanName) ||
+        (digitsOnly && digitsOnly.length >= 8 ? nisnMap.get(digitsOnly.padStart(10, '0')) : undefined) ||
+        nisMap.get(nameWithoutExt) ||
+        nisMap.get(cleanName) ||
+        (digitsOnly ? nisMap.get(digitsOnly) : undefined) ||
+        nameMap.get(cleanName);
     }
 
     if (targetStudent) {
-      const blob = await entry.async('blob');
+      // Determine correct MIME type to prevent corrupt data URLs
+      let mimeType = 'image/jpeg';
+      if (lower.endsWith('.png')) mimeType = 'image/png';
+      else if (lower.endsWith('.webp')) mimeType = 'image/webp';
+
+      const uint8 = await entry.async('uint8array');
+      const blob = new Blob([uint8], { type: mimeType });
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -656,6 +730,7 @@ export async function matchPhotosFromZip(
         studentName: targetStudent.nama,
         studentNis: targetStudent.nis,
         studentNisn: targetStudent.nisn,
+        previewUrl: dataUrl,
       });
     } else {
       unmatchedFiles.push(baseName);
@@ -673,9 +748,9 @@ export async function matchPhotosFromZip(
 }
 
 /**
- * Generate a ready-to-test ZIP file containing passport photos named by student NIS
+ * Generate a ready-to-test ZIP file containing passport photos named by student NISN (10 digits)
  */
-export async function downloadSampleZipByNis(students: Student[]) {
+export async function downloadSampleZipByNisn(students: Student[]) {
   const zip = new JSZip();
 
   // Create a 3:4 passport canvas for sample generation
@@ -687,9 +762,9 @@ export async function downloadSampleZipByNis(students: Student[]) {
 
   const targetStudents = students.slice(0, 5);
   for (const s of targetStudents) {
-    if (!s.nis) continue;
+    const nisnVal = s.nisn ? s.nisn.padStart(10, '0') : '0078129341';
 
-    // Draw passport style avatar with student NIS
+    // Draw passport style avatar with student NISN
     ctx.fillStyle = '#0284c7';
     ctx.fillRect(0, 0, 300, 400);
 
@@ -704,9 +779,81 @@ export async function downloadSampleZipByNis(students: Student[]) {
     ctx.fill();
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = 'bold 20px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(s.nama.slice(0, 16), 150, 300);
+    ctx.fillText(s.nama.slice(0, 18), 150, 300);
+
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(`NISN: ${nisnVal}`, 150, 335);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9)
+    );
+
+    if (blob) {
+      zip.file(`${nisnVal}.jpg`, blob);
+    }
+  }
+
+  // Also include a readme guide
+  zip.file(
+    'PETUNJUK_PENAMAAN_FOTO_NISN.txt',
+    'PETUNJUK UPLOAD MASSAL FOTO SISWA DARI BERKAS ZIP (FORMAT NISN)\n\n' +
+      '1. Setiap file foto di dalam arsip ZIP harus diberi nama sesuai NISN 10 digit siswa.\n' +
+      '   Contoh penamaan yang didukung otomatis:\n' +
+      '   - 0078129341.jpg (Standar Resmi NISN 10 Digit)\n' +
+      '   - 0075412980.png\n' +
+      '   - NISN_0069812455.jpg\n' +
+      '   - 0078129341 - Nama Siswa.jpg\n\n' +
+      '2. Format foto yang didukung: JPG, JPEG, PNG, dan WEBP.\n' +
+      '3. Ukuran foto ideal: Rasio 3:4 (contoh: 300x400 px atau 600x800 px).\n' +
+      '4. Sistem otomatis mencocokkan nomor NISN siswa yang terdaftar di aplikasi SMA Negeri 1 Julok.\n'
+  );
+
+  const content = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Contoh_Foto_Siswa_Format_NISN.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate a ready-to-test ZIP file containing passport photos named by student NIS
+ */
+export async function downloadSampleZipByNis(students: Student[]) {
+  const zip = new JSZip();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 300;
+  canvas.height = 400;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const targetStudents = students.slice(0, 5);
+  for (const s of targetStudents) {
+    if (!s.nis) continue;
+
+    ctx.fillStyle = '#0284c7';
+    ctx.fillRect(0, 0, 300, 400);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(150, 150, 65, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.ellipse(150, 360, 110, 80, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.nama.slice(0, 18), 150, 300);
 
     ctx.font = 'bold 20px monospace';
     ctx.fillText(`NIS: ${s.nis}`, 150, 335);
@@ -720,10 +867,9 @@ export async function downloadSampleZipByNis(students: Student[]) {
     }
   }
 
-  // Also include a readme
   zip.file(
-    'PETUNJUK_PENAMAAN_FOTO.txt',
-    'PETUNJUK UPLOAD MASSAL FOTO SISWA DARI ZIP\n\n' +
+    'PETUNJUK_PENAMAAN_FOTO_NIS.txt',
+    'PETUNJUK UPLOAD MASSAL FOTO SISWA DARI ZIP (FORMAT NIS)\n\n' +
       '1. Setiap file foto di dalam arsip ZIP harus diberi nama sesuai NIS siswa (contoh: 22231018.jpg, 22231001.png).\n' +
       '2. Format foto yang didukung: JPG, JPEG, PNG, dan WEBP.\n' +
       '3. Aplikasi otomatis mendeteksi dan memasangkan foto ke profil siswa yang memiliki NIS yang sama.\n'
