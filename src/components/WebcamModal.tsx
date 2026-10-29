@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Camera, RefreshCw, Check, X, AlertTriangle, Upload, SwitchCamera } from 'lucide-react';
 import { Student } from '../types';
+import { optimizeStudentPhoto } from '../utils/imageCompressor';
 
 interface WebcamModalProps {
   isOpen: boolean;
@@ -137,15 +138,22 @@ export const WebcamModal: React.FC<WebcamModalProps> = ({
     stopCamera();
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setCapturedPhoto(reader.result as string);
+      try {
+        const optimized = await optimizeStudentPhoto(file);
+        setCapturedPhoto(optimized);
         stopCamera();
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Gagal mengoptimasi foto:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          setCapturedPhoto(reader.result as string);
+          stopCamera();
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

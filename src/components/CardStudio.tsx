@@ -37,6 +37,7 @@ import {
   OFFICIAL_STAMP_SVG,
   OFFICIAL_SIGNATURE_SVG,
 } from '../data/defaults';
+import { optimizeTransparentPng } from '../utils/imageCompressor';
 
 interface CardStudioProps {
   settings: CardSettings;
@@ -196,47 +197,71 @@ export const CardStudio: React.FC<CardStudioProps> = ({
     });
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        onUpdateSettings({ ...settings, schoolLogo: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const optimized = await optimizeTransparentPng(file, 600);
+        onUpdateSettings({ ...settings, schoolLogo: optimized });
+      } catch (err) {
+        console.error('Gagal memproses logo sekolah:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          onUpdateSettings({ ...settings, schoolLogo: reader.result as string });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleAcehLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAcehLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        onUpdateSettings({ ...settings, pancasilaLogo: reader.result as string, showPancasila: true });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const optimized = await optimizeTransparentPng(file, 600);
+        onUpdateSettings({ ...settings, pancasilaLogo: optimized, showPancasila: true });
+      } catch (err) {
+        console.error('Gagal memproses logo daerah:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          onUpdateSettings({ ...settings, pancasilaLogo: reader.result as string, showPancasila: true });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleStampUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStampUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        onUpdateSettings({ ...settings, stempelUrl: reader.result as string, showStempel: true });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const optimized = await optimizeTransparentPng(file, 600);
+        onUpdateSettings({ ...settings, stempelUrl: optimized, showStempel: true });
+      } catch (err) {
+        console.error('Gagal memproses stempel:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          onUpdateSettings({ ...settings, stempelUrl: reader.result as string, showStempel: true });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        onUpdateSettings({ ...settings, tandaTanganUrl: reader.result as string, showTandaTangan: true });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const optimized = await optimizeTransparentPng(file, 600);
+        onUpdateSettings({ ...settings, tandaTanganUrl: optimized, showTandaTangan: true });
+      } catch (err) {
+        console.error('Gagal memproses tanda tangan:', err);
+        const reader = new FileReader();
+        reader.onload = () => {
+          onUpdateSettings({ ...settings, tandaTanganUrl: reader.result as string, showTandaTangan: true });
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

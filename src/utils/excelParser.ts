@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { Student } from '../types';
+import { optimizeStudentPhoto } from './imageCompressor';
 
 export interface ColumnMapping {
   nisn: string;
@@ -717,11 +718,17 @@ export async function matchPhotosFromZip(
 
       const uint8 = await entry.async('uint8array');
       const blob = new Blob([uint8 as any], { type: mimeType });
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
+      let dataUrl: string;
+      try {
+        dataUrl = await optimizeStudentPhoto(blob);
+      } catch (err) {
+        console.warn('Gagal kompresi foto ZIP, menggunakan fallback:', err);
+        dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
 
       updatedMap.set(targetStudent.id, dataUrl);
       matchedCount++;

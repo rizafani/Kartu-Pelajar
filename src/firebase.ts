@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
   doc,
   getDocFromServer,
   collection,
@@ -24,12 +25,20 @@ import {
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { Student, CardSettings, ClassInfo } from './types';
+import { optimizeStudentPhoto, optimizeTransparentPng } from './utils/imageCompressor';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
 // CRITICAL: Must use firestoreDatabaseId from configuration
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Configure with experimentalForceLongPolling to prevent 10s backend unreachable timeout in cloud/proxy environments
+export const db = initializeFirestore(
+  app,
+  {
+    experimentalForceLongPolling: true,
+  },
+  firebaseConfig.firestoreDatabaseId
+);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
@@ -88,13 +97,22 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Connection test on boot
+// Connection test on boot with fast timeout protection
 export async function testConnection(): Promise<boolean> {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    const probe = getDocFromServer(doc(db, 'test', 'connection'));
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Connection check timeout')), 3500)
+    );
+    await Promise.race([probe, timeout]);
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('the client is offline') ||
+        error.message.includes('timeout') ||
+        error.message.includes('Could not reach'))
+    ) {
       console.warn('Firebase client is offline or network unreachable.');
       return false;
     }
@@ -162,7 +180,17 @@ function prepareStudentForFirestore(student: Student, userId: string): Record<st
 export async function saveStudentToFirestore(student: Student, userId: string): Promise<void> {
   const docPath = `students/${student.id}`;
   try {
-    const studentData = prepareStudentForFirestore(student, userId);
+    let studentToSave = student;
+    // Defensive check: if photo data URL exceeds 200KB, optimize it before sending to Firestore
+    if (student.foto && student.foto.length > 200000) {
+      try {
+        const compressed = await optimizeStudentPhoto(student.foto);
+        studentToSave = { ...student, foto: compressed };
+      } catch (e) {
+        console.warn('Defensive photo compression notice:', e);
+      }
+    }
+    const studentData = prepareStudentForFirestore(studentToSave, userId);
     await setDoc(doc(db, 'students', student.id), studentData);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);
@@ -215,10 +243,25 @@ export async function batchSaveStudentsToFirestore(
   if (students.length === 0) return;
   const pathForBatch = 'students';
   try {
+    // Ensure any oversized photos are compressed so batch write never hits Firestore limit
+    const safeStudents = await Promise.all(
+      students.map(async (student) => {
+        if (student.foto && student.foto.length > 200000) {
+          try {
+            const compressed = await optimizeStudentPhoto(student.foto);
+            return { ...student, foto: compressed };
+          } catch {
+            return student;
+          }
+        }
+        return student;
+      })
+    );
+
     // Firestore batch supports up to 500 writes
     const chunks: Student[][] = [];
-    for (let i = 0; i < students.length; i += 400) {
-      chunks.push(students.slice(i, i + 400));
+    for (let i = 0; i < safeStudents.length; i += 400) {
+      chunks.push(safeStudents.slice(i, i + 400));
     }
 
     for (const chunk of chunks) {
@@ -253,6 +296,21 @@ export async function saveSettingsToFirestore(
         cleanSettings[k] = v;
       }
     }
+
+    // Defensive check: optimize transparent logos/stamps if oversized
+    if (cleanSettings.schoolLogo && typeof cleanSettings.schoolLogo === 'string' && cleanSettings.schoolLogo.length > 200000) {
+      try { cleanSettings.schoolLogo = await optimizeTransparentPng(cleanSettings.schoolLogo, 600); } catch {}
+    }
+    if (cleanSettings.pancasilaLogo && typeof cleanSettings.pancasilaLogo === 'string' && cleanSettings.pancasilaLogo.length > 200000) {
+      try { cleanSettings.pancasilaLogo = await optimizeTransparentPng(cleanSettings.pancasilaLogo, 600); } catch {}
+    }
+    if (cleanSettings.stempelUrl && typeof cleanSettings.stempelUrl === 'string' && cleanSettings.stempelUrl.length > 200000) {
+      try { cleanSettings.stempelUrl = await optimizeTransparentPng(cleanSettings.stempelUrl, 600); } catch {}
+    }
+    if (cleanSettings.tandaTanganUrl && typeof cleanSettings.tandaTanganUrl === 'string' && cleanSettings.tandaTanganUrl.length > 200000) {
+      try { cleanSettings.tandaTanganUrl = await optimizeTransparentPng(cleanSettings.tandaTanganUrl, 600); } catch {}
+    }
+
     await setDoc(doc(db, 'settings', settingId), cleanSettings);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, docPath);

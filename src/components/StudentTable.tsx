@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Student, ClassInfo } from '../types';
 import { StudentPhotoChoiceModal } from './StudentPhotoChoiceModal';
+import { optimizeStudentPhoto } from '../utils/imageCompressor';
 
 interface StudentTableProps {
   students: Student[];
@@ -170,12 +171,18 @@ export const StudentTable: React.FC<StudentTableProps> = ({
     setFormError('');
   };
 
-  const handlePhotoUploadForStudent = (student: Student, file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      onUpdateStudent({ ...student, foto: reader.result as string });
-    };
-    reader.readAsDataURL(file);
+  const handlePhotoUploadForStudent = async (student: Student, file: File) => {
+    try {
+      const optimizedPhoto = await optimizeStudentPhoto(file);
+      onUpdateStudent({ ...student, foto: optimizedPhoto });
+    } catch (err) {
+      console.error('Gagal mengoptimasi foto:', err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        onUpdateStudent({ ...student, foto: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
@@ -581,14 +588,20 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            setEditingStudent({ ...editingStudent, foto: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                          try {
+                            const optimizedPhoto = await optimizeStudentPhoto(file);
+                            setEditingStudent({ ...editingStudent, foto: optimizedPhoto });
+                          } catch (err) {
+                            console.error('Gagal mengoptimasi foto:', err);
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setEditingStudent({ ...editingStudent, foto: reader.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
                         }
                       }}
                       className="hidden"
