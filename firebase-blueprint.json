@@ -70,6 +70,26 @@
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["schoolName", "ownerId"]
+    },
+    "ClassInfo": {
+      "title": "ClassInfo",
+      "description": "School classroom or rombel entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "nama": { "type": "string", "maxLength": 100 },
+        "tingkat": { "type": "string", "maxLength": 20 },
+        "fase": { "type": "string", "maxLength": 50 },
+        "jurusan": { "type": "string", "maxLength": 80 },
+        "waliKelas": { "type": "string", "maxLength": 150 },
+        "nipWaliKelas": { "type": "string", "maxLength": 50 },
+        "tahunAjaran": { "type": "string", "maxLength": 30 },
+        "ruangan": { "type": "string", "maxLength": 80 },
+        "keterangan": { "type": "string", "maxLength": 300 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["nama", "ownerId"]
     }
   },
   "firestore": {
@@ -80,6 +100,10 @@
     "/settings/{settingId}": {
       "schema": { "$ref": "CardSettings" },
       "description": "School card configuration settings"
+    },
+    "/classes/{classId}": {
+      "schema": { "$ref": "ClassInfo" },
+      "description": "School classrooms collection"
     }
   }
 }

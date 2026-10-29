@@ -143,36 +143,7 @@ export default function App() {
     }
   }, [classes]);
 
-  // Auto-discover classes from students
-  useEffect(() => {
-    if (students.length === 0) return;
-    const existingClassNames = new Set(classes.map((c) => c.nama.trim()));
-    const missingClasses: ClassInfo[] = [];
 
-    students.forEach((s) => {
-      const clsName = (s.kelas || '').trim();
-      if (clsName && !existingClassNames.has(clsName) && !missingClasses.some((m) => m.nama === clsName)) {
-        let tingkat: 'X' | 'XI' | 'XII' | 'Lainnya' = 'Lainnya';
-        if (clsName.startsWith('X-') || clsName.startsWith('X ')) tingkat = 'X';
-        else if (clsName.startsWith('XI-') || clsName.startsWith('XI ')) tingkat = 'XI';
-        else if (clsName.startsWith('XII-') || clsName.startsWith('XII ')) tingkat = 'XII';
-
-        missingClasses.push({
-          id: `cls-auto-${Date.now()}-${clsName.replace(/[^a-zA-Z0-9]/g, '_')}`,
-          nama: clsName,
-          tingkat,
-          fase: tingkat === 'X' ? 'Fase E (Umum)' : tingkat === 'XI' || tingkat === 'XII' ? 'Fase F' : 'Umum',
-          jurusan: s.jurusan || 'Umum',
-          tahunAjaran: '2024/2025',
-          keterangan: 'Terdaftar otomatis dari data siswa',
-        });
-      }
-    });
-
-    if (missingClasses.length > 0) {
-      setClasses((prev) => [...prev, ...missingClasses]);
-    }
-  }, [students, classes]);
 
   const [printSettings, setPrintSettings] = useState<PrintSettings>(DEFAULT_PRINT_SETTINGS);
 
@@ -460,6 +431,45 @@ export default function App() {
     } else {
       setStudents((prev) => [...newStudents, ...prev]);
     }
+
+    // Auto-discover any new classes found in imported student roster
+    const currentClassNames = new Set(classes.map((c) => c.nama.trim().toLowerCase()));
+    const discoveredClasses: ClassInfo[] = [];
+
+    newStudents.forEach((s) => {
+      const clsName = (s.kelas || '').trim();
+      if (
+        clsName &&
+        !currentClassNames.has(clsName.toLowerCase()) &&
+        !discoveredClasses.some((d) => d.nama.toLowerCase() === clsName.toLowerCase())
+      ) {
+        let tingkat: 'X' | 'XI' | 'XII' | 'Lainnya' = 'Lainnya';
+        if (clsName.startsWith('X-') || clsName.startsWith('X ')) tingkat = 'X';
+        else if (clsName.startsWith('XI-') || clsName.startsWith('XI ')) tingkat = 'XI';
+        else if (clsName.startsWith('XII-') || clsName.startsWith('XII ')) tingkat = 'XII';
+
+        const safeId = `cls-${Date.now()}-${discoveredClasses.length}-${clsName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        discoveredClasses.push({
+          id: safeId,
+          nama: clsName,
+          tingkat,
+          fase: tingkat === 'X' ? 'Fase E (Umum)' : tingkat === 'XI' || tingkat === 'XII' ? 'Fase F' : 'Umum',
+          jurusan: s.jurusan || 'Umum',
+          tahunAjaran: '2024/2025',
+          keterangan: 'Terdaftar otomatis dari import siswa',
+        });
+      }
+    });
+
+    if (discoveredClasses.length > 0) {
+      setClasses((prev) => [...prev, ...discoveredClasses]);
+      if (currentUser) {
+        batchSaveClassesToFirestore(discoveredClasses, currentUser.uid).catch((err) =>
+          console.error('Failed saving newly discovered classes', err)
+        );
+      }
+    }
+
     showToast(`Berhasil mengimpor ${newStudents.length} data siswa.`);
     if (currentUser) {
       try {
@@ -504,11 +514,21 @@ export default function App() {
 
   // Handlers for Class Management
   const handleAddClass = async (newClass: ClassInfo) => {
-    setClasses((prev) => [...prev, newClass]);
-    showToast(`Kelas "${newClass.nama}" berhasil ditambahkan.`);
+    const safeId =
+      newClass.id && /^[a-zA-Z0-9_-]+$/.test(newClass.id)
+        ? newClass.id
+        : `cls-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const classToSave: ClassInfo = {
+      ...newClass,
+      id: safeId,
+      nama: newClass.nama.trim(),
+    };
+
+    setClasses((prev) => [...prev, classToSave]);
+    showToast(`Kelas "${classToSave.nama}" berhasil ditambahkan.`);
     if (currentUser) {
       try {
-        await saveClassToFirestore(newClass, currentUser.uid);
+        await saveClassToFirestore(classToSave, currentUser.uid);
       } catch (err) {
         console.error('Failed saving class to Firestore', err);
       }
@@ -549,8 +569,30 @@ export default function App() {
 
   const handleDeleteClass = async (classId: string) => {
     const cls = classes.find((c) => c.id === classId);
+    const className = cls?.nama;
+
+    // 1. Remove class from state
     setClasses((prev) => prev.filter((c) => c.id !== classId));
-    showToast(`Kelas "${cls?.nama || classId}" berhasil dihapus.`);
+
+    // 2. Unassign students that belonged to the deleted class
+    if (className) {
+      const affectedStudents = students.filter((s) => (s.kelas || '').trim() === className);
+      if (affectedStudents.length > 0) {
+        setStudents((prev) =>
+          prev.map((s) => ((s.kelas || '').trim() === className ? { ...s, kelas: '' } : s))
+        );
+        if (currentUser) {
+          try {
+            const updatedStudents = affectedStudents.map((s) => ({ ...s, kelas: '' }));
+            await batchSaveStudentsToFirestore(updatedStudents, currentUser.uid);
+          } catch (err) {
+            console.error('Failed unassigning students from deleted class in Firestore', err);
+          }
+        }
+      }
+    }
+
+    showToast(`Kelas "${className || classId}" berhasil dihapus.`);
     if (currentUser) {
       try {
         await deleteClassFromFirestore(classId);

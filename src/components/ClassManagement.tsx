@@ -53,7 +53,7 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
   onTriggerMassDownloadZip,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [gradeFilter, setGradeFilter] = useState<'all' | 'X' | 'XI' | 'XII'>('all');
+  const [gradeFilter, setGradeFilter] = useState<'all' | 'X' | 'XI' | 'XII' | 'Lainnya'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Modal Add / Edit Class State
@@ -154,7 +154,7 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
     setOriginalClassName('');
     setFormError('');
     setEditingClass({
-      id: `cls-${Date.now()}`,
+      id: `cls-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       nama: '',
       tingkat: 'X',
       fase: 'Fase E (Umum)',
@@ -189,7 +189,7 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
 
     // Check duplicate name
     const isDuplicate = classes.some(
-      (c) => c.nama.toLowerCase() === trimmedName.toLowerCase() && c.id !== editingClass.id
+      (c) => c.nama.trim().toLowerCase() === trimmedName.toLowerCase() && c.id !== editingClass.id
     );
     if (isDuplicate) {
       setFormError(`Kelas dengan nama "${trimmedName}" sudah terdaftar.`);
@@ -372,9 +372,9 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
           </div>
 
           {/* Tingkat Filter Buttons */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
             <span className="text-[11px] font-semibold text-slate-500 px-2">Tingkat:</span>
-            {(['all', 'X', 'XI', 'XII'] as const).map((grade) => (
+            {(['all', 'X', 'XI', 'XII', 'Lainnya'] as const).map((grade) => (
               <button
                 key={grade}
                 onClick={() => setGradeFilter(grade)}
@@ -384,7 +384,7 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {grade === 'all' ? 'Semua' : `Kelas ${grade}`}
+                {grade === 'all' ? 'Semua' : grade === 'Lainnya' ? 'Lainnya' : `Kelas ${grade}`}
               </button>
             ))}
           </div>
@@ -417,6 +417,26 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
 
       {/* 3. Class List: Grid View */}
       {viewMode === 'grid' ? (
+        filteredClasses.length === 0 ? (
+          <div className="bg-white border border-slate-200/90 rounded-2xl p-10 text-center shadow-xs">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+              <School className="w-7 h-7" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">Tidak Ada Kelas yang Ditemukan</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+              {searchQuery || gradeFilter !== 'all'
+                ? 'Tidak ada kelas yang cocok dengan kata kunci pencarian atau filter tingkat saat ini.'
+                : 'Belum ada rombel / kelas yang terdaftar. Silakan tambahkan kelas baru.'}
+            </p>
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Kelas Baru</span>
+            </button>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredClasses.map((cls) => {
             const stats = classStats[cls.nama] || {
@@ -569,6 +589,7 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
             );
           })}
         </div>
+        )
       ) : (
         /* 4. Class List: Detailed Table View */
         <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden">
@@ -586,7 +607,29 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredClasses.map((cls) => {
+                {filteredClasses.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-2">
+                        <School className="w-6 h-6" />
+                      </div>
+                      <p className="font-bold text-xs text-slate-800">Tidak ada kelas yang ditemukan</p>
+                      <p className="text-[11px] text-slate-400 mt-0.5 mb-3">
+                        {searchQuery || gradeFilter !== 'all'
+                          ? 'Coba sesuaikan kata kunci atau filter tingkat.'
+                          : 'Belum ada rombel / kelas yang terdaftar.'}
+                      </p>
+                      <button
+                        onClick={handleOpenAdd}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Kelas Baru</span>
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                filteredClasses.map((cls) => {
                   const stats = classStats[cls.nama] || {
                     total: 0,
                     male: 0,
@@ -680,7 +723,8 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
                       </td>
                     </tr>
                   );
-                })}
+                })
+              )}
               </tbody>
             </table>
           </div>
@@ -733,7 +777,10 @@ export const ClassManagement: React.FC<ClassManagementProps> = ({
                     required
                     placeholder="Contoh: X-1, XI MIPA 1"
                     value={editingClass.nama}
-                    onChange={(e) => setEditingClass({ ...editingClass, nama: e.target.value })}
+                    onChange={(e) => {
+                      setEditingClass({ ...editingClass, nama: e.target.value });
+                      if (formError) setFormError('');
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
