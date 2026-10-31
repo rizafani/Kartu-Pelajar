@@ -112,5 +112,35 @@ service cloud.firestore {
                        isValidId(classId) &&
                        (isAdmin() || !('ownerId' in existing()) || existing().ownerId == request.auth.uid);
     }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['studentId', 'nisn', 'nama', 'date', 'status', 'ownerId']) &&
+             data.nama is string && data.nama.size() > 0 && data.nama.size() <= 150 &&
+             data.nisn is string && data.nisn.size() > 0 && data.nisn.size() <= 30 &&
+             data.date is string && data.date.size() <= 20 &&
+             data.status is string &&
+             data.ownerId is string && data.ownerId == request.auth.uid;
+    }
+
+    // Attendance Collection
+    match /attendance/{recordId} {
+      allow get: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(recordId) &&
+                       isValidAttendance(incoming()) &&
+                       incoming().ownerId == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidId(recordId) &&
+                       (isAdmin() || existing().ownerId == request.auth.uid) &&
+                       incoming().ownerId == existing().ownerId &&
+                       isValidAttendance(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(recordId) &&
+                       (isAdmin() || existing().ownerId == request.auth.uid);
+    }
   }
 }

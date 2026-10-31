@@ -24,10 +24,14 @@ import {
   LogOut,
   ShieldCheck,
   GraduationCap,
+  Clock,
+  Scan,
+  History,
+  ClipboardCheck,
 } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
-import { CardSettings, PrintSettings, Student, ClassInfo } from './types';
+import { CardSettings, PrintSettings, Student, ClassInfo, AttendanceRecord, AttendanceStatus } from './types';
 import {
   DEFAULT_CARD_SETTINGS,
   DEFAULT_PRINT_SETTINGS,
@@ -46,8 +50,21 @@ import { BatchPrintView } from './components/BatchPrintView';
 import { SingleCardModal } from './components/SingleCardModal';
 import { WebcamModal } from './components/WebcamModal';
 import { CardVerificationView } from './components/CardVerificationView';
+import { LoginPage } from './components/LoginPage';
+import { AttendanceDashboard } from './components/AttendanceDashboard';
+import { BarcodeScannerModal } from './components/BarcodeScannerModal';
+import { AttendanceNotificationModal } from './components/AttendanceNotificationModal';
+import { AttendanceRecordsView } from './components/AttendanceRecordsView';
 import { downloadCardAsPng, CardResolution, RESOLUTION_OPTIONS } from './utils/cardExporter';
 import { decodeVerificationPayload } from './utils/barcodeGenerator';
+import {
+  saveStudentsToOffline,
+  loadStudentsFromOffline,
+  saveSettingsToOffline,
+  saveClassesToOffline,
+  saveAttendanceToOffline,
+  loadAttendanceFromOffline,
+} from './utils/offlineStorage';
 import {
   auth,
   db,
@@ -65,17 +82,33 @@ import {
   deleteClassFromFirestore,
   batchSaveClassesToFirestore,
   loadClassesFromFirestore,
+  saveAttendanceToFirestore,
+  deleteAttendanceFromFirestore,
+  batchSaveAttendanceToFirestore,
+  loadAttendanceFromFirestore,
   handleFirestoreError,
   OperationType,
 } from './firebase';
+import {
+  extractNisnFromBarcode,
+  findStudentByNisnOrId,
+  createAttendanceRecord,
+  getTodayDateString,
+  formatIndonesianTime,
+} from './utils/attendanceHelper';
+import { playSuccessChime, playErrorBuzz } from './utils/soundEffects';
 
 const STORAGE_KEY_STUDENTS = 'sman1_julok_students_v2';
 const STORAGE_KEY_SETTINGS = 'sman1_julok_settings_v2';
 const STORAGE_KEY_CLASSES = 'sman1_julok_classes_v2';
+const STORAGE_KEY_ATTENDANCE = 'sman1_julok_attendance_v1';
 
 export default function App() {
   // Authentication & Cloud Database State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [cloudStudentCount, setCloudStudentCount] = useState<number>(0);
@@ -142,21 +175,44 @@ export default function App() {
     return INITIAL_CLASSES;
   });
 
-  // Save classes to localStorage
+  // Save classes to offline storage
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_CLASSES, JSON.stringify(classes));
-    } catch (e) {
-      console.error('Failed saving classes to storage', e);
-    }
+    saveClassesToOffline(classes, STORAGE_KEY_CLASSES).catch((e) => {
+      console.warn('Notice saving classes to offline storage', e);
+    });
   }, [classes]);
 
 
 
   const [printSettings, setPrintSettings] = useState<PrintSettings>(DEFAULT_PRINT_SETTINGS);
 
-  // Active view tab: 'studio' (Designer) vs 'students' (Database Roster) vs 'classes' (Manajemen Kelas)
-  const [activeTab, setActiveTab] = useState<'studio' | 'students' | 'classes'>('studio');
+  // Active view tab: 'attendance' (Presensi Digital) vs 'records' (Rekap Kehadiran) vs 'students' (Database Roster) vs 'studio' (Designer) vs 'classes' (Manajemen Kelas)
+  const [activeTab, setActiveTab] = useState<'attendance' | 'records' | 'students' | 'studio' | 'classes'>('attendance');
+
+  // Attendance System State
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState<boolean>(false);
+  const [scanNotification, setScanNotification] = useState<{
+    record: AttendanceRecord;
+    student: Student;
+  } | null>(null);
+
+  // Load and save attendance to offline storage (IndexedDB)
+  useEffect(() => {
+    loadAttendanceFromOffline(STORAGE_KEY_ATTENDANCE)
+      .then((saved) => {
+        if (saved && saved.length > 0) {
+          setAttendanceRecords(saved);
+        }
+      })
+      .catch((e) => console.warn('Attendance load offline notice:', e));
+  }, []);
+
+  useEffect(() => {
+    saveAttendanceToOffline(attendanceRecords, STORAGE_KEY_ATTENDANCE).catch((e) =>
+      console.warn('Attendance save offline notice:', e)
+    );
+  }, [attendanceRecords]);
 
   // Inter-tab filter navigation states
   const [focusedClassForStudio, setFocusedClassForStudio] = useState<string>('all');
@@ -208,6 +264,19 @@ export default function App() {
     window.history.pushState({}, '', newUrl);
   };
 
+  // Load cached students from IndexedDB on startup
+  useEffect(() => {
+    loadStudentsFromOffline(STORAGE_KEY_STUDENTS)
+      .then((saved) => {
+        if (saved && saved.length > 0) {
+          setStudents(saved);
+        }
+      })
+      .catch((err) => {
+        console.warn('Notice loading students from IndexedDB:', err);
+      });
+  }, []);
+
   // Test connection on initial app boot and check redirect auth result
   useEffect(() => {
     testConnection().then((connected) => {
@@ -226,6 +295,9 @@ export default function App() {
       })
       .catch((err) => {
         console.warn('Redirect auth check notice:', err);
+      })
+      .finally(() => {
+        setAuthInitialized(true);
       });
   }, []);
 
@@ -233,6 +305,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      setAuthInitialized(true);
       if (user) {
         showToast(`Terhubung sebagai ${user.displayName || user.email}`);
       }
@@ -323,31 +396,47 @@ export default function App() {
       }
     );
 
+    // 4. Real-time Attendance Listener across Devices
+    const qAttendance = query(collection(db, 'attendance'), where('ownerId', '==', currentUser.uid));
+    const unsubAttendance = onSnapshot(
+      qAttendance,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const remoteRecords = snapshot.docs.map((d) => d.data() as AttendanceRecord);
+          setAttendanceRecords(remoteRecords);
+        } else if (isFirstAuthCheck.current && attendanceRecords.length > 0) {
+          batchSaveAttendanceToFirestore(attendanceRecords, currentUser.uid).catch((err) =>
+            console.warn('Initial attendance cloud push error:', err)
+          );
+        }
+      },
+      (error) => {
+        console.warn('Attendance real-time sync notice:', error);
+      }
+    );
+
     isFirstAuthCheck.current = false;
 
     return () => {
       unsubStudents();
       unsubClasses();
       unsubSettings();
+      unsubAttendance();
     };
   }, [currentUser]);
 
-  // Persist students to localStorage for offline cache
+  // Persist students to IndexedDB (and quota-safe localStorage) to prevent QuotaExceededError
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
-    } catch (e) {
-      console.error('Storage full or error saving students', e);
-    }
+    saveStudentsToOffline(students, STORAGE_KEY_STUDENTS).catch((e) => {
+      console.warn('Notice saving students to offline storage', e);
+    });
   }, [students]);
 
-  // Persist card settings to localStorage and auto-sync to Firestore (with loop-prevention)
+  // Persist card settings to offline storage and auto-sync to Firestore (with loop-prevention)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(cardSettings));
-    } catch (e) {
-      console.error('Storage full or error saving settings', e);
-    }
+    saveSettingsToOffline(cardSettings, STORAGE_KEY_SETTINGS).catch((e) => {
+      console.warn('Notice saving settings to offline storage', e);
+    });
 
     if (currentUser) {
       if (isRemoteSettingsUpdate.current) {
@@ -360,7 +449,7 @@ export default function App() {
     }
   }, [cardSettings, currentUser]);
 
-  // Cloud Sync Handler: upload all current local students and classes to Firestore
+  // Cloud Sync Handler: upload all current local students, classes, and attendance to Firestore
   const handleSyncAllToCloud = async () => {
     if (!currentUser) {
       showToast('Silakan masuk dengan akun Google terlebih dahulu.');
@@ -378,9 +467,12 @@ export default function App() {
         batchSaveStudentsToFirestore(students, currentUser.uid),
         batchSaveClassesToFirestore(classes, currentUser.uid),
         saveSettingsToFirestore(cardSettings, currentUser.uid),
+        batchSaveAttendanceToFirestore(attendanceRecords, currentUser.uid),
       ]);
       setCloudStudentCount(students.length);
-      showToast(`Berhasil menyinkronkan ${students.length} siswa & ${classes.length} kelas antar-perangkat!`);
+      showToast(
+        `Berhasil menyinkronkan ${students.length} siswa, ${classes.length} kelas, & ${attendanceRecords.length} catatan absensi!`
+      );
     } catch (err) {
       console.error('Sync failed', err);
       showToast('Gagal menyinkronkan ke database cloud.');
@@ -420,10 +512,178 @@ export default function App() {
     }
   };
 
+  // Quick verification lookup from login or search
+  const handleOpenVerificationByNisn = (nisn: string) => {
+    setVerificationNisn(nisn);
+    const newUrl = `${window.location.pathname}?verify=${encodeURIComponent(nisn)}`;
+    window.history.pushState({}, '', newUrl);
+  };
+
+  // Today's attendance records memo
+  const todayDateStr = getTodayDateString();
+  const todayAttendanceRecords = React.useMemo(() => {
+    return attendanceRecords.filter((r) => r.date === todayDateStr);
+  }, [attendanceRecords, todayDateStr]);
+
+  // Handler when barcode is scanned by camera or manual USB input
+  const handleBarcodeDetected = (scannedText: string) => {
+    const nisn = extractNisnFromBarcode(scannedText);
+    if (!nisn) {
+      playErrorBuzz();
+      showToast('Format barcode tidak valid atau kosong.');
+      return;
+    }
+
+    const student = findStudentByNisnOrId(nisn, students);
+    if (!student) {
+      playErrorBuzz();
+      showToast(`Siswa dengan NISN "${nisn}" tidak ditemukan di database sekolah.`);
+      return;
+    }
+
+    const today = getTodayDateString();
+    const existing = attendanceRecords.find(
+      (r) => r.date === today && (r.studentId === student.id || r.nisn === student.nisn)
+    );
+
+    let recordToNotify: AttendanceRecord;
+    if (existing) {
+      recordToNotify = existing;
+      showToast(`${student.nama} sudah tercatat absen hari ini pada ${existing.timeString}.`);
+    } else {
+      recordToNotify = createAttendanceRecord(
+        student,
+        today,
+        undefined,
+        'barcode_scan',
+        currentUser?.uid
+      );
+      setAttendanceRecords((prev) => [recordToNotify, ...prev.filter((r) => r.id !== recordToNotify.id)]);
+      if (currentUser) {
+        saveAttendanceToFirestore(recordToNotify, currentUser.uid).catch((err) => {
+          console.warn('Failed saving attendance to cloud', err);
+        });
+      }
+      showToast(`Presensi ${student.nama} (${student.kelas}) berhasil dicatat!`);
+    }
+
+    playSuccessChime();
+    setScanNotification({ record: recordToNotify, student });
+  };
+
+  // Handler to manually update attendance record status (Hadir/Terlambat/Izin/Sakit/Alpa)
+  const handleUpdateRecordStatus = async (
+    recordId: string,
+    newStatus: AttendanceStatus,
+    student: Student,
+    dateStr: string,
+    keterangan?: string
+  ) => {
+    const existing = attendanceRecords.find((r) => r.id === recordId);
+    let updatedRecord: AttendanceRecord;
+    if (existing) {
+      updatedRecord = {
+        ...existing,
+        status: newStatus,
+        keterangan: keterangan !== undefined ? keterangan : existing.keterangan,
+      };
+    } else {
+      updatedRecord = {
+        id: recordId,
+        studentId: student.id,
+        nisn: student.nisn,
+        nis: student.nis,
+        nama: student.nama,
+        kelas: student.kelas,
+        jurusan: student.jurusan,
+        foto: student.foto,
+        date: dateStr,
+        timestamp: Date.now(),
+        timeString: formatIndonesianTime(new Date()),
+        status: newStatus,
+        keterangan,
+        method: 'manual_entry',
+        ownerId: currentUser?.uid,
+      };
+    }
+
+    setAttendanceRecords((prev) => [
+      updatedRecord,
+      ...prev.filter((r) => r.id !== updatedRecord.id),
+    ]);
+
+    if (scanNotification && scanNotification.record.id === recordId) {
+      setScanNotification({ record: updatedRecord, student });
+    }
+
+    showToast(`Status kehadiran ${student.nama} diperbarui menjadi ${newStatus.toUpperCase()}.`);
+
+    if (currentUser) {
+      try {
+        await saveAttendanceToFirestore(updatedRecord, currentUser.uid);
+      } catch (err) {
+        console.error('Failed saving status update to Firestore', err);
+      }
+    }
+  };
+
+  // Handler to mark all unmarked students as Alpa
+  const handleMarkAllUnmarkedAsAlpa = async (dateStr: string, classFilter: string) => {
+    const targetStudents = students.filter((s) => {
+      if (classFilter !== 'all' && (s.kelas || '').trim() !== classFilter) return false;
+      return true;
+    });
+
+    const existingNisns = new Set(
+      attendanceRecords
+        .filter((r) => r.date === dateStr)
+        .map((r) => r.nisn.toLowerCase())
+    );
+
+    const unmarked = targetStudents.filter(
+      (s) => !existingNisns.has(s.nisn.toLowerCase())
+    );
+
+    if (unmarked.length === 0) {
+      showToast('Semua siswa sudah memiliki status kehadiran pada tanggal ini.');
+      return;
+    }
+
+    const newAlpaRecords: AttendanceRecord[] = unmarked.map((s) => ({
+      id: `att-${dateStr}-${s.id}`,
+      studentId: s.id,
+      nisn: s.nisn,
+      nis: s.nis,
+      nama: s.nama,
+      kelas: s.kelas,
+      jurusan: s.jurusan,
+      foto: s.foto,
+      date: dateStr,
+      timestamp: Date.now(),
+      timeString: '07:30:00 WIB',
+      status: 'alpa',
+      keterangan: 'Tidak hadir tanpa keterangan',
+      method: 'manual_entry',
+      ownerId: currentUser?.uid,
+    }));
+
+    setAttendanceRecords((prev) => [...newAlpaRecords, ...prev]);
+    showToast(`${newAlpaRecords.length} siswa ditandai sebagai Alpa.`);
+
+    if (currentUser) {
+      try {
+        await batchSaveAttendanceToFirestore(newAlpaRecords, currentUser.uid);
+      } catch (err) {
+        console.error('Failed saving alpa batch to cloud', err);
+      }
+    }
+  };
+
   // Login handler with error diagnostics & troubleshooting modal
   const handleLogin = async (useRedirect: boolean | unknown = false) => {
     const shouldRedirect = useRedirect === true;
     try {
+      setIsLoggingIn(true);
       showToast('Menghubungkan ke Akun Google...');
       const user = await signInWithGoogle(shouldRedirect);
       if (user) {
@@ -444,6 +704,8 @@ export default function App() {
         message: errMsg,
         domain: typeof window !== 'undefined' ? window.location.hostname : '',
       });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -451,6 +713,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOutUser();
+      setIsGuestMode(false);
       showToast('Telah keluar dari akun.');
     } catch (err) {
       console.error('Logout error', err);
@@ -833,6 +1096,58 @@ export default function App() {
     );
   }
 
+  // Render initial loading screen while checking auth
+  if (!authInitialized) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-white/10 p-2 flex items-center justify-center border border-white/20 mb-4 animate-pulse">
+          <img src={SMAN1_JULOK_LOGO_PATH} alt="SMAN 1 Julok" className="w-full h-full object-contain" />
+        </div>
+        <h2 className="text-white font-bold text-base mb-1">SMA NEGERI 1 JULOK</h2>
+        <p className="text-slate-400 text-xs">Memuat sistem kartu pelajar & presensi digital...</p>
+      </div>
+    );
+  }
+
+  // Render Login Page as the default landing page when user is not logged in
+  if (!currentUser && !isGuestMode) {
+    return (
+      <>
+        <LoginPage
+          onLogin={handleLogin}
+          isLoggingIn={isLoggingIn}
+          authError={authErrorModalData}
+          onClearAuthError={() => setAuthErrorModalData(null)}
+          onQuickVerify={handleOpenVerificationByNisn}
+          onContinueAsGuest={() => setIsGuestMode(true)}
+          schoolName={cardSettings.schoolName || 'SMA NEGERI 1 JULOK'}
+          totalStudents={students.length}
+          totalClasses={classes.length}
+        />
+
+        {/* Diagnostic Modal if popup/redirect issues occur */}
+        <AuthTroubleshootModal
+          isOpen={!!authErrorModalData}
+          onClose={() => setAuthErrorModalData(null)}
+          errorCode={authErrorModalData?.code || ''}
+          errorMessage={authErrorModalData?.message || ''}
+          domain={authErrorModalData?.domain || ''}
+          onRetryWithRedirect={() => handleLogin(true)}
+          onRetryWithPopup={() => handleLogin(false)}
+          students={students}
+          classes={classes}
+          cardSettings={cardSettings}
+          onRestoreBackup={({ students: restoredStudents, classes: restoredClasses, settings: restoredSettings }) => {
+            if (restoredStudents && restoredStudents.length > 0) setStudents(restoredStudents);
+            if (restoredClasses && restoredClasses.length > 0) setClasses(restoredClasses);
+            if (restoredSettings) setCardSettings((prev) => ({ ...prev, ...restoredSettings }));
+            showToast('Data cadangan berhasil dipulihkan!');
+          }}
+        />
+      </>
+    );
+  }
+
   // Render Fullscreen Batch Print View if active
   if (isBatchPrintOpen) {
     return (
@@ -848,6 +1163,33 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+      {/* Guest Mode Notification Banner */}
+      {isGuestMode && !currentUser && (
+        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 border-b border-blue-800/40 shadow-xs z-50">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span className="font-semibold text-blue-200">Mode Pratinjau / Tamu:</span>
+            <span className="text-slate-300 hidden sm:inline">
+              Data hanya tersimpan di perangkat ini. Masuk dengan Akun Google untuk sinkronisasi otomatis ke cloud.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => handleLogin(false)}
+              className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-lg text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+            >
+              <LogIn className="w-3.5 h-3.5 text-blue-600" />
+              <span>Masuk dengan Google</span>
+            </button>
+            <button
+              onClick={() => setIsGuestMode(false)}
+              className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+            >
+              Ke Halaman Login
+            </button>
+          </div>
+        </div>
+      )}
       {/* Top Main Navigation Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
@@ -876,18 +1218,30 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center Tabs: Studio vs Daftar Siswa */}
-          <div className="hidden sm:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          {/* Center Tabs: Absensi vs Rekap vs Siswa vs Studio vs Kelas */}
+          <div className="hidden lg:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
-              onClick={() => setActiveTab('studio')}
+              onClick={() => setActiveTab('attendance')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                activeTab === 'studio'
+                activeTab === 'attendance'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scan className="w-3.5 h-3.5" />
+              <span>Absensi Siswa</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('records')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'records'
                   ? 'bg-white text-blue-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Palette className="w-3.5 h-3.5" />
-              <span>Studio Desain</span>
+              <Clock className="w-3.5 h-3.5" />
+              <span>Rekap Kehadiran</span>
             </button>
 
             <button
@@ -903,6 +1257,18 @@ export default function App() {
             </button>
 
             <button
+              onClick={() => setActiveTab('studio')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'studio'
+                  ? 'bg-white text-blue-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              <span>Studio Kartu</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('classes')}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === 'classes'
@@ -911,12 +1277,22 @@ export default function App() {
               }`}
             >
               <GraduationCap className="w-3.5 h-3.5" />
-              <span>Manajemen Kelas ({classes.length})</span>
+              <span>Kelas ({classes.length})</span>
             </button>
           </div>
 
           {/* Right Action Buttons & Cloud Database Auth */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Quick Scan Barcode Trigger */}
+            <button
+              onClick={() => setIsScannerModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-extrabold rounded-xl shadow-xs shadow-blue-500/20 transition-all cursor-pointer"
+              title="Buka Pemindai Barcode Kamera"
+            >
+              <Scan className="w-4 h-4 animate-pulse" />
+              <span className="hidden sm:inline">Pindai Barcode</span>
+            </button>
+
             {/* Cloud Database Sync & Account */}
             {currentUser ? (
               <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-xl p-1">
@@ -927,10 +1303,10 @@ export default function App() {
                   title="Sinkronkan semua data lokal ke Cloud Firestore"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span className="hidden md:inline">Sinkron Cloud</span>
+                  <span className="hidden xl:inline">Sinkron Cloud</span>
                 </button>
                 <div className="h-4 w-[1px] bg-emerald-200" />
-                <span className="hidden xl:inline text-[11px] font-semibold text-emerald-900 px-1 max-w-[120px] truncate">
+                <span className="hidden 2xl:inline text-[11px] font-semibold text-emerald-900 px-1 max-w-[120px] truncate">
                   {currentUser.displayName || currentUser.email}
                 </span>
                 <button
@@ -958,7 +1334,7 @@ export default function App() {
                 const std = students.find((s) => s.id === previewStudentId) || students[0];
                 if (std) handleOpenVerification(std);
               }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 transition-colors cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-300 transition-colors cursor-pointer"
               title="Buka Halaman Verifikasi Keaslian Kartu (Simulasi Scan QR)"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
@@ -966,58 +1342,61 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setIsZipModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-bold rounded-xl border border-blue-200 transition-colors cursor-pointer"
-              title="Upload Foto Massal dari Berkas ZIP sesuai NIS"
-            >
-              <FileArchive className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden md:inline">Foto ZIP</span>
-            </button>
-
-            <button
               onClick={() => setIsImportModalOpen(true)}
-              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl border border-slate-200/80 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 transition-colors cursor-pointer"
+              title="Impor Data Siswa Excel (.xlsx / .xls / .csv)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Impor Excel</span>
+              <span className="hidden md:inline">Impor Excel</span>
             </button>
 
             <button
               onClick={() => handleTriggerPrint(selectedStudentIds.length > 0 ? 'selected' : 'all')}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs shadow-blue-500/20 transition-all cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>
-                Cetak{' '}
-                {selectedStudentIds.length > 0
-                  ? `(${selectedStudentIds.length})`
-                  : `(${students.length})`}
-              </span>
+              <span className="hidden md:inline">Cetak Kartu</span>
             </button>
           </div>
         </div>
 
-        {/* Mobile View Segmented Tab Switcher */}
-        <div className="sm:hidden px-4 py-2 border-t border-slate-100 flex items-center gap-2 bg-slate-50">
+        {/* Mobile / Tablet Segmented Tab Switcher */}
+        <div className="lg:hidden px-3 py-2 border-t border-slate-100 flex items-center gap-1 bg-slate-50 overflow-x-auto">
           <button
-            onClick={() => setActiveTab('studio')}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg text-center ${
-              activeTab === 'studio' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
+            onClick={() => setActiveTab('attendance')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${
+              activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600'
             }`}
           >
-            Studio
+            Absensi
+          </button>
+          <button
+            onClick={() => setActiveTab('records')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${
+              activeTab === 'records' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Rekap
           </button>
           <button
             onClick={() => setActiveTab('students')}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg text-center ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${
               activeTab === 'students' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
             }`}
           >
             Siswa ({students.length})
           </button>
           <button
+            onClick={() => setActiveTab('studio')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${
+              activeTab === 'studio' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
+            }`}
+          >
+            Studio
+          </button>
+          <button
             onClick={() => setActiveTab('classes')}
-            className={`flex-1 py-1.5 text-xs font-bold rounded-lg text-center ${
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap ${
               activeTab === 'classes' ? 'bg-white text-blue-900 shadow-xs' : 'text-slate-600'
             }`}
           >
@@ -1103,7 +1482,32 @@ export default function App() {
           </div>
         </div>
 
-        {activeTab === 'studio' ? (
+        {activeTab === 'attendance' ? (
+          <AttendanceDashboard
+            students={students}
+            classes={classes}
+            todayRecords={todayAttendanceRecords}
+            onOpenScanner={() => setIsScannerModalOpen(true)}
+            onNavigateToRecords={() => setActiveTab('records')}
+            onNavigateToStudio={() => setActiveTab('studio')}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
+            onQuickManualScan={handleBarcodeDetected}
+            isSyncing={isSyncing}
+          />
+        ) : activeTab === 'records' ? (
+          <AttendanceRecordsView
+            students={students}
+            classes={classes}
+            allRecords={attendanceRecords}
+            onUpdateRecordStatus={handleUpdateRecordStatus}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
+            onMarkAllUnmarkedAsAlpa={handleMarkAllUnmarkedAsAlpa}
+            onOpenCardStudioForStudent={(stdId) => {
+              setPreviewStudentId(stdId);
+              setActiveTab('studio');
+            }}
+          />
+        ) : activeTab === 'studio' ? (
           <div className="space-y-6">
             {/* Quick Hero Notification banner */}
             <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-5 text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md">
@@ -1286,6 +1690,32 @@ export default function App() {
           if (restoredClasses && restoredClasses.length > 0) setClasses(restoredClasses);
           if (restoredSettings) setCardSettings((prev) => ({ ...prev, ...restoredSettings }));
           showToast('Data cadangan berhasil dipulihkan!');
+        }}
+      />
+
+      {/* Barcode Camera & USB Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={isScannerModalOpen}
+        onClose={() => setIsScannerModalOpen(false)}
+        onBarcodeDetected={handleBarcodeDetected}
+      />
+
+      {/* Barcode Scan Result Notification Modal with Student Photo & Status */}
+      <AttendanceNotificationModal
+        isOpen={!!scanNotification}
+        onClose={() => setScanNotification(null)}
+        record={scanNotification?.record || null}
+        student={scanNotification?.student || null}
+        onUpdateStatus={(newStatus, note) => {
+          if (scanNotification) {
+            handleUpdateRecordStatus(
+              scanNotification.record.id,
+              newStatus,
+              scanNotification.student,
+              scanNotification.record.date,
+              note
+            );
+          }
         }}
       />
 

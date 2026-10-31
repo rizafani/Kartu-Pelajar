@@ -122,3 +122,24 @@ export interface PrintSettings {
   cardScale: number; // 0.8 to 1.1
   spacingMm: number;
 }
+
+export type AttendanceStatus = 'hadir' | 'terlambat' | 'izin' | 'sakit' | 'alpa';
+
+export interface AttendanceRecord {
+  id: string;
+  studentId: string;
+  nisn: string;
+  nis?: string;
+  nama: string;
+  kelas: string;
+  jurusan?: string;
+  foto?: string;
+  date: string; // YYYY-MM-DD
+  timestamp: number;
+  timeString: string; // HH:mm:ss
+  status: AttendanceStatus;
+  keterangan?: string;
+  method?: 'barcode_scan' | 'manual_entry' | 'qr_scan';
+  ownerId?: string;
+}
+

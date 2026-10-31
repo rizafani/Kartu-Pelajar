@@ -24,7 +24,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { Student, CardSettings, ClassInfo } from './types';
+import { Student, CardSettings, ClassInfo, AttendanceRecord } from './types';
 import { optimizeStudentPhoto, optimizeTransparentPng } from './utils/imageCompressor';
 
 // Initialize Firebase App
@@ -399,3 +399,91 @@ export async function loadClassesFromFirestore(userId: string): Promise<ClassInf
     return [];
   }
 }
+
+// Attendance Firestore Handlers
+export function prepareAttendanceForFirestore(
+  record: AttendanceRecord,
+  userId: string
+): Record<string, any> {
+  const clean: Record<string, any> = {
+    id: record.id,
+    studentId: record.studentId,
+    nisn: record.nisn,
+    nama: record.nama,
+    kelas: record.kelas || '',
+    date: record.date,
+    timestamp: record.timestamp || Date.now(),
+    timeString: record.timeString || '',
+    status: record.status || 'hadir',
+    ownerId: userId,
+  };
+  if (record.nis) clean.nis = record.nis;
+  if (record.jurusan) clean.jurusan = record.jurusan;
+  if (record.foto && record.foto.length < 500000) clean.foto = record.foto;
+  if (record.keterangan) clean.keterangan = record.keterangan;
+  if (record.method) clean.method = record.method;
+  return clean;
+}
+
+export async function saveAttendanceToFirestore(
+  record: AttendanceRecord,
+  userId: string
+): Promise<void> {
+  const docPath = `attendance/${record.id}`;
+  try {
+    const data = prepareAttendanceForFirestore(record, userId);
+    await setDoc(doc(db, 'attendance', record.id), data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, docPath);
+  }
+}
+
+export async function deleteAttendanceFromFirestore(recordId: string): Promise<void> {
+  const docPath = `attendance/${recordId}`;
+  try {
+    await deleteDoc(doc(db, 'attendance', recordId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, docPath);
+  }
+}
+
+export async function batchSaveAttendanceToFirestore(
+  records: AttendanceRecord[],
+  userId: string
+): Promise<void> {
+  if (records.length === 0) return;
+  const pathForBatch = 'attendance';
+  try {
+    const batch = writeBatch(db);
+    for (const rec of records) {
+      const recRef = doc(db, 'attendance', rec.id);
+      batch.set(recRef, prepareAttendanceForFirestore(rec, userId));
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, pathForBatch);
+  }
+}
+
+export async function loadAttendanceFromFirestore(
+  userId: string,
+  date?: string
+): Promise<AttendanceRecord[]> {
+  const docPath = 'attendance';
+  try {
+    let q = query(collection(db, 'attendance'), where('ownerId', '==', userId));
+    if (date) {
+      q = query(
+        collection(db, 'attendance'),
+        where('ownerId', '==', userId),
+        where('date', '==', date)
+      );
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as AttendanceRecord);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, docPath);
+    return [];
+  }
+}
+
